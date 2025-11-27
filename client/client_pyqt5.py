@@ -1,0 +1,693 @@
+"""
+FlashControler Windows客户端主程序 (PyQt5版本)
+提供现代化、美观的GUI界面进行远程终端和文件传输
+"""
+import sys
+import os
+from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
+                             QHBoxLayout, QTabWidget, QLabel, QLineEdit,
+                             QPushButton, QTextEdit, QFileDialog, QProgressBar,
+                             QMessageBox, QGroupBox, QGridLayout, QSplitter)
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer
+from PyQt5.QtGui import QFont, QIcon, QPalette, QColor, QTextCursor
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from client.connection import ClientConnection
+from client.update_manager import UpdateManager
+from common.config import Config
+
+
+class ConnectionThread(QThread):
+    """连接线程"""
+    result = pyqtSignal(bool, str)
+
+    def __init__(self, connection, host, port, password):
+        super().__init__()
+        self.connection = connection
+        self.host = host
+        self.port = port
+        self.password = password
+
+    def run(self):
+        success, message = self.connection.connect(self.host, self.port, self.password)
+        self.result.emit(success, message)
+
+
+class UploadThread(QThread):
+    """上传线程"""
+    result = pyqtSignal(bool, str)
+
+    def __init__(self, connection, file_path, target_path):
+        super().__init__()
+        self.connection = connection
+        self.file_path = file_path
+        self.target_path = target_path
+
+    def run(self):
+        success, message = self.connection.upload_file(self.file_path, self.target_path)
+        self.result.emit(success, message)
+
+
+class UpdateCheckThread(QThread):
+    """更新检查线程"""
+    result = pyqtSignal(object)
+
+    def __init__(self, update_manager):
+        super().__init__()
+        self.update_manager = update_manager
+
+    def run(self):
+        update_info = self.update_manager.check_update()
+        self.result.emit(update_info)
+
+
+class FlashClientGUI(QMainWindow):
+    """FlashControler客户端GUI (PyQt5版本)"""
+
+    def __init__(self):
+        super().__init__()
+
+        self.config = Config("config/settings.json")
+        self.connection = ClientConnection()
+        self.update_manager = UpdateManager(
+            current_version=self.config.get('update', 'current_version', '1.0.0'),
+            update_url=self.config.get('update', 'update_url', '')
+        )
+
+        self.setup_ui()
+        self.setup_callbacks()
+        self.apply_styles()
+
+        # 启动时检查更新
+        if self.config.get('update', 'check_on_startup', True):
+            QTimer.singleShot(1000, self.check_update)
+
+    def setup_ui(self):
+        """设置UI"""
+        self.setWindowTitle("FlashControler - 远程控制客户端")
+        self.setGeometry(100, 100, 1200, 800)
+
+        # 创建中心部件
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+
+        # 主布局
+        main_layout = QVBoxLayout(central_widget)
+        main_layout.setSpacing(10)
+        main_layout.setContentsMargins(15, 15, 15, 15)
+
+        # 连接区域
+        self.setup_connection_section(main_layout)
+
+        # 标签页
+        self.tabs = QTabWidget()
+        self.tabs.setDocumentMode(True)
+        main_layout.addWidget(self.tabs)
+
+        # 创建各个标签页
+        self.setup_terminal_tab()
+        self.setup_file_transfer_tab()
+        self.setup_about_tab()
+
+    def setup_connection_section(self, parent_layout):
+        """设置连接区域"""
+        conn_group = QGroupBox("连接设置")
+        conn_layout = QGridLayout()
+        conn_group.setLayout(conn_layout)
+
+        # 服务器地址
+        conn_layout.addWidget(QLabel("服务器地址:"), 0, 0)
+        self.host_input = QLineEdit()
+        self.host_input.setPlaceholderText("例如: 192.168.1.100")
+        self.host_input.setText(self.config.get('client', 'last_host', ''))
+        conn_layout.addWidget(self.host_input, 0, 1)
+
+        # 端口
+        conn_layout.addWidget(QLabel("端口:"), 0, 2)
+        self.port_input = QLineEdit()
+        self.port_input.setPlaceholderText("9999")
+        self.port_input.setText(str(self.config.get('client', 'last_port', 9999)))
+        self.port_input.setMaximumWidth(100)
+        conn_layout.addWidget(self.port_input, 0, 3)
+
+        # 密码
+        conn_layout.addWidget(QLabel("密码:"), 0, 4)
+        self.password_input = QLineEdit()
+        self.password_input.setEchoMode(QLineEdit.Password)
+        self.password_input.setText("flashcontrol123")
+        conn_layout.addWidget(self.password_input, 0, 5)
+
+        # 连接按钮
+        self.connect_btn = QPushButton("连接")
+        self.connect_btn.setMinimumWidth(120)
+        self.connect_btn.clicked.connect(self.toggle_connection)
+        conn_layout.addWidget(self.connect_btn, 0, 6)
+
+        # 状态指示器
+        status_container = QWidget()
+        status_layout = QHBoxLayout(status_container)
+        status_layout.setContentsMargins(0, 0, 0, 0)
+
+        self.status_indicator = QLabel("●")
+        self.status_indicator.setStyleSheet("color: #e74c3c; font-size: 16px;")
+        self.status_label = QLabel("未连接")
+        self.status_label.setStyleSheet("color: #e74c3c; font-weight: bold;")
+
+        status_layout.addWidget(self.status_indicator)
+        status_layout.addWidget(self.status_label)
+        status_layout.addStretch()
+
+        conn_layout.addWidget(status_container, 0, 7)
+
+        parent_layout.addWidget(conn_group)
+
+    def setup_terminal_tab(self):
+        """设置终端标签页"""
+        terminal_widget = QWidget()
+        terminal_layout = QVBoxLayout(terminal_widget)
+        terminal_layout.setSpacing(10)
+
+        # 终端输出区域
+        self.terminal_output = QTextEdit()
+        self.terminal_output.setReadOnly(True)
+        self.terminal_output.setFont(QFont("Consolas", 10))
+        self.terminal_output.setStyleSheet("""
+            QTextEdit {
+                background-color: #1e1e1e;
+                color: #d4d4d4;
+                border: 2px solid #3c3c3c;
+                border-radius: 5px;
+                padding: 10px;
+            }
+        """)
+        terminal_layout.addWidget(self.terminal_output)
+
+        # 命令输入区域
+        input_container = QWidget()
+        input_layout = QHBoxLayout(input_container)
+        input_layout.setContentsMargins(0, 0, 0, 0)
+
+        input_layout.addWidget(QLabel("命令:"))
+
+        self.terminal_input = QLineEdit()
+        self.terminal_input.setPlaceholderText("输入命令，按Enter发送...")
+        self.terminal_input.returnPressed.connect(self.send_terminal_command)
+        input_layout.addWidget(self.terminal_input)
+
+        self.send_btn = QPushButton("发送")
+        self.send_btn.setMinimumWidth(80)
+        self.send_btn.clicked.connect(self.send_terminal_command)
+        input_layout.addWidget(self.send_btn)
+
+        self.clear_terminal_btn = QPushButton("清屏")
+        self.clear_terminal_btn.setMinimumWidth(80)
+        self.clear_terminal_btn.clicked.connect(self.clear_terminal)
+        input_layout.addWidget(self.clear_terminal_btn)
+
+        terminal_layout.addWidget(input_container)
+
+        self.tabs.addTab(terminal_widget, "🖥️ 远程终端")
+
+    def setup_file_transfer_tab(self):
+        """设置文件传输标签页"""
+        file_widget = QWidget()
+        file_layout = QVBoxLayout(file_widget)
+        file_layout.setSpacing(15)
+
+        # 文件选择区域
+        file_select_group = QGroupBox("文件选择")
+        file_select_layout = QVBoxLayout()
+
+        # 本地文件
+        local_container = QWidget()
+        local_layout = QHBoxLayout(local_container)
+        local_layout.setContentsMargins(0, 0, 0, 0)
+
+        local_layout.addWidget(QLabel("本地文件:"))
+        self.file_path_input = QLineEdit()
+        self.file_path_input.setPlaceholderText("选择要上传的文件...")
+        local_layout.addWidget(self.file_path_input)
+
+        self.browse_btn = QPushButton("浏览...")
+        self.browse_btn.setMinimumWidth(100)
+        self.browse_btn.clicked.connect(self.browse_file)
+        local_layout.addWidget(self.browse_btn)
+
+        file_select_layout.addWidget(local_container)
+
+        # 目标路径
+        target_container = QWidget()
+        target_layout = QHBoxLayout(target_container)
+        target_layout.setContentsMargins(0, 0, 0, 0)
+
+        target_layout.addWidget(QLabel("目标路径:"))
+        self.target_path_input = QLineEdit()
+        self.target_path_input.setText("/tmp")
+        self.target_path_input.setPlaceholderText("Linux服务器上的目标目录...")
+        target_layout.addWidget(self.target_path_input)
+
+        file_select_layout.addWidget(target_container)
+
+        file_select_group.setLayout(file_select_layout)
+        file_layout.addWidget(file_select_group)
+
+        # 上传按钮
+        self.upload_btn = QPushButton("📤 开始上传")
+        self.upload_btn.setMinimumHeight(40)
+        self.upload_btn.clicked.connect(self.upload_file)
+        file_layout.addWidget(self.upload_btn)
+
+        # 进度区域
+        progress_group = QGroupBox("传输进度")
+        progress_layout = QVBoxLayout()
+
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setMinimum(0)
+        self.progress_bar.setMaximum(100)
+        self.progress_bar.setValue(0)
+        self.progress_bar.setTextVisible(True)
+        progress_layout.addWidget(self.progress_bar)
+
+        self.progress_label = QLabel("等待上传...")
+        self.progress_label.setAlignment(Qt.AlignCenter)
+        progress_layout.addWidget(self.progress_label)
+
+        progress_group.setLayout(progress_layout)
+        file_layout.addWidget(progress_group)
+
+        # 传输日志
+        log_group = QGroupBox("传输日志")
+        log_layout = QVBoxLayout()
+
+        self.transfer_log = QTextEdit()
+        self.transfer_log.setReadOnly(True)
+        self.transfer_log.setMaximumHeight(200)
+        log_layout.addWidget(self.transfer_log)
+
+        log_group.setLayout(log_layout)
+        file_layout.addWidget(log_group)
+
+        file_layout.addStretch()
+
+        self.tabs.addTab(file_widget, "📁 文件传输")
+
+    def setup_about_tab(self):
+        """设置关于标签页"""
+        about_widget = QWidget()
+        about_layout = QVBoxLayout(about_widget)
+        about_layout.setAlignment(Qt.AlignCenter)
+
+        # Logo/标题
+        title = QLabel("FlashControler")
+        title.setFont(QFont("Arial", 28, QFont.Bold))
+        title.setAlignment(Qt.AlignCenter)
+        about_layout.addWidget(title)
+
+        # 副标题
+        subtitle = QLabel("闪控 - Windows到Linux远程控制工具")
+        subtitle.setFont(QFont("Arial", 12))
+        subtitle.setAlignment(Qt.AlignCenter)
+        subtitle.setStyleSheet("color: #7f8c8d; margin-bottom: 20px;")
+        about_layout.addWidget(subtitle)
+
+        # 版本信息
+        version = self.config.get('update', 'current_version', '1.0.0')
+        version_label = QLabel(f"版本: {version}")
+        version_label.setFont(QFont("Arial", 11))
+        version_label.setAlignment(Qt.AlignCenter)
+        about_layout.addWidget(version_label)
+
+        about_layout.addSpacing(30)
+
+        # 功能介绍
+        features_group = QGroupBox("主要功能")
+        features_layout = QVBoxLayout()
+        features_layout.setSpacing(10)
+
+        features = [
+            "🖥️  远程终端访问 - 直接控制Linux主机终端",
+            "📁  快速文件传输 - 轻松上传文件到Linux服务器",
+            "🔒  安全认证 - 密码保护，确保连接安全",
+            "🔄  自动更新 - 智能检测新版本",
+            "🎨  美观界面 - 现代化的用户体验"
+        ]
+
+        for feature in features:
+            label = QLabel(feature)
+            label.setFont(QFont("Arial", 10))
+            features_layout.addWidget(label)
+
+        features_group.setLayout(features_layout)
+        about_layout.addWidget(features_group)
+
+        about_layout.addSpacing(20)
+
+        # 检查更新按钮
+        self.update_btn = QPushButton("🔄 检查更新")
+        self.update_btn.setMinimumHeight(40)
+        self.update_btn.setMinimumWidth(200)
+        self.update_btn.clicked.connect(self.check_update)
+        about_layout.addWidget(self.update_btn, alignment=Qt.AlignCenter)
+
+        about_layout.addStretch()
+
+        # 版权信息
+        copyright_label = QLabel("© 2024 FlashControler | MIT License")
+        copyright_label.setAlignment(Qt.AlignCenter)
+        copyright_label.setStyleSheet("color: #95a5a6; font-size: 9px;")
+        about_layout.addWidget(copyright_label)
+
+        self.tabs.addTab(about_widget, "ℹ️ 关于")
+
+    def apply_styles(self):
+        """应用样式"""
+        self.setStyleSheet("""
+            QMainWindow {
+                background-color: #f5f6fa;
+            }
+            QGroupBox {
+                font-weight: bold;
+                border: 2px solid #dcdde1;
+                border-radius: 8px;
+                margin-top: 10px;
+                padding-top: 10px;
+                background-color: white;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 15px;
+                padding: 0 5px 0 5px;
+                color: #2c3e50;
+            }
+            QPushButton {
+                background-color: #3498db;
+                color: white;
+                border: none;
+                border-radius: 5px;
+                padding: 8px 15px;
+                font-weight: bold;
+                font-size: 11px;
+            }
+            QPushButton:hover {
+                background-color: #2980b9;
+            }
+            QPushButton:pressed {
+                background-color: #21618c;
+            }
+            QPushButton:disabled {
+                background-color: #bdc3c7;
+            }
+            QLineEdit {
+                border: 2px solid #dcdde1;
+                border-radius: 5px;
+                padding: 8px;
+                background-color: white;
+                font-size: 11px;
+            }
+            QLineEdit:focus {
+                border: 2px solid #3498db;
+            }
+            QTabWidget::pane {
+                border: 2px solid #dcdde1;
+                border-radius: 5px;
+                background-color: white;
+                top: -1px;
+            }
+            QTabBar::tab {
+                background-color: #ecf0f1;
+                border: 2px solid #dcdde1;
+                border-bottom: none;
+                border-top-left-radius: 5px;
+                border-top-right-radius: 5px;
+                padding: 10px 20px;
+                margin-right: 2px;
+                font-weight: bold;
+            }
+            QTabBar::tab:selected {
+                background-color: white;
+                border-bottom: 2px solid white;
+            }
+            QTabBar::tab:hover {
+                background-color: #d5dbdb;
+            }
+            QProgressBar {
+                border: 2px solid #dcdde1;
+                border-radius: 5px;
+                text-align: center;
+                height: 25px;
+                background-color: white;
+            }
+            QProgressBar::chunk {
+                background-color: #2ecc71;
+                border-radius: 3px;
+            }
+            QTextEdit {
+                border: 2px solid #dcdde1;
+                border-radius: 5px;
+                padding: 5px;
+                background-color: white;
+            }
+        """)
+
+    def setup_callbacks(self):
+        """设置回调函数"""
+        self.connection.register_callback('terminal_output', self.on_terminal_output)
+        self.connection.register_callback('disconnected', self.on_disconnected)
+        self.connection.register_callback('file_progress', self.on_file_progress)
+
+    def toggle_connection(self):
+        """切换连接状态"""
+        if not self.connection.connected:
+            host = self.host_input.text().strip()
+            port_text = self.port_input.text().strip()
+            password = self.password_input.text()
+
+            if not host or not port_text:
+                QMessageBox.warning(self, "输入错误", "请输入服务器地址和端口")
+                return
+
+            try:
+                port = int(port_text)
+            except ValueError:
+                QMessageBox.warning(self, "输入错误", "端口必须是数字")
+                return
+
+            self.status_label.setText("连接中...")
+            self.status_label.setStyleSheet("color: #f39c12; font-weight: bold;")
+            self.status_indicator.setStyleSheet("color: #f39c12; font-size: 16px;")
+            self.connect_btn.setEnabled(False)
+
+            # 在后台线程连接
+            self.conn_thread = ConnectionThread(self.connection, host, port, password)
+            self.conn_thread.result.connect(self.on_connect_result)
+            self.conn_thread.start()
+        else:
+            self.connection.disconnect()
+            self.on_disconnected()
+
+    def on_connect_result(self, success, message):
+        """连接结果处理"""
+        self.connect_btn.setEnabled(True)
+
+        if success:
+            self.status_label.setText("已连接")
+            self.status_label.setStyleSheet("color: #27ae60; font-weight: bold;")
+            self.status_indicator.setStyleSheet("color: #27ae60; font-size: 16px;")
+            self.connect_btn.setText("断开连接")
+            self.connect_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #e74c3c;
+                }
+                QPushButton:hover {
+                    background-color: #c0392b;
+                }
+            """)
+
+            # 保存连接信息
+            self.config.set('client', 'last_host', self.host_input.text())
+            self.config.set('client', 'last_port', int(self.port_input.text()))
+
+            self.append_terminal_output(
+                f"\n{'='*60}\n"
+                f"已连接到 {self.host_input.text()}:{self.port_input.text()}\n"
+                f"{'='*60}\n"
+            )
+        else:
+            self.status_label.setText("未连接")
+            self.status_label.setStyleSheet("color: #e74c3c; font-weight: bold;")
+            self.status_indicator.setStyleSheet("color: #e74c3c; font-size: 16px;")
+            QMessageBox.critical(self, "连接失败", message)
+
+    def on_disconnected(self):
+        """断开连接回调"""
+        self.status_label.setText("未连接")
+        self.status_label.setStyleSheet("color: #e74c3c; font-weight: bold;")
+        self.status_indicator.setStyleSheet("color: #e74c3c; font-size: 16px;")
+        self.connect_btn.setText("连接")
+        self.connect_btn.setStyleSheet("")
+        self.append_terminal_output(
+            f"\n{'='*60}\n"
+            f"连接已断开\n"
+            f"{'='*60}\n"
+        )
+
+    def send_terminal_command(self):
+        """发送终端命令"""
+        if not self.connection.connected:
+            QMessageBox.warning(self, "未连接", "请先连接到服务器")
+            return
+
+        command = self.terminal_input.text()
+        if command:
+            if not command.endswith('\n'):
+                command += '\n'
+
+            self.connection.send_terminal_input(command)
+            self.terminal_input.clear()
+
+    def on_terminal_output(self, output):
+        """终端输出回调"""
+        if isinstance(output, bytes):
+            try:
+                output = output.decode('utf-8')
+            except:
+                output = output.decode('utf-8', errors='ignore')
+
+        self.append_terminal_output(output)
+
+    def append_terminal_output(self, text):
+        """追加终端输出"""
+        self.terminal_output.moveCursor(QTextCursor.End)
+        self.terminal_output.insertPlainText(text)
+        self.terminal_output.moveCursor(QTextCursor.End)
+
+    def clear_terminal(self):
+        """清空终端"""
+        self.terminal_output.clear()
+
+    def browse_file(self):
+        """浏览文件"""
+        filename, _ = QFileDialog.getOpenFileName(
+            self,
+            "选择要上传的文件",
+            "",
+            "所有文件 (*.*)"
+        )
+        if filename:
+            self.file_path_input.setText(filename)
+
+    def upload_file(self):
+        """上传文件"""
+        if not self.connection.connected:
+            QMessageBox.warning(self, "未连接", "请先连接到服务器")
+            return
+
+        file_path = self.file_path_input.text()
+        target_path = self.target_path_input.text()
+
+        if not file_path or not os.path.exists(file_path):
+            QMessageBox.warning(self, "文件错误", "请选择有效的文件")
+            return
+
+        if not target_path:
+            QMessageBox.warning(self, "路径错误", "请输入目标路径")
+            return
+
+        self.upload_btn.setEnabled(False)
+        self.progress_bar.setValue(0)
+        self.progress_label.setText("准备上传...")
+
+        # 在后台线程上传
+        self.upload_thread = UploadThread(self.connection, file_path, target_path)
+        self.upload_thread.result.connect(self.on_upload_complete)
+        self.upload_thread.start()
+
+        self.log_transfer(f"开始上传: {os.path.basename(file_path)}")
+
+    def on_upload_complete(self, success, message):
+        """上传完成"""
+        self.upload_btn.setEnabled(True)
+
+        if success:
+            self.log_transfer(f"✓ 上传成功: {message}")
+            QMessageBox.information(self, "上传成功", message)
+            self.progress_bar.setValue(100)
+            self.progress_label.setText("上传完成!")
+        else:
+            self.log_transfer(f"✗ 上传失败: {message}")
+            QMessageBox.critical(self, "上传失败", message)
+            self.progress_label.setText("上传失败!")
+
+    def on_file_progress(self, progress, sent, total):
+        """文件传输进度回调"""
+        self.progress_bar.setValue(int(progress))
+        self.progress_label.setText(
+            f"正在上传: {progress:.1f}% ({self.format_bytes(sent)} / {self.format_bytes(total)})"
+        )
+
+    def format_bytes(self, bytes_num):
+        """格式化字节数"""
+        for unit in ['B', 'KB', 'MB', 'GB']:
+            if bytes_num < 1024.0:
+                return f"{bytes_num:.2f} {unit}"
+            bytes_num /= 1024.0
+        return f"{bytes_num:.2f} TB"
+
+    def log_transfer(self, message):
+        """记录传输日志"""
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        self.transfer_log.append(f"[{timestamp}] {message}")
+
+    def check_update(self):
+        """检查更新"""
+        self.update_btn.setEnabled(False)
+        self.update_btn.setText("🔄 检查中...")
+
+        self.update_check_thread = UpdateCheckThread(self.update_manager)
+        self.update_check_thread.result.connect(self.on_update_checked)
+        self.update_check_thread.start()
+
+    def on_update_checked(self, update_info):
+        """更新检查完成"""
+        self.update_btn.setEnabled(True)
+        self.update_btn.setText("🔄 检查更新")
+
+        if update_info is None:
+            QMessageBox.critical(self, "检查更新失败", "无法连接到更新服务器，请检查网络连接")
+        elif update_info.get('has_update'):
+            reply = QMessageBox.question(
+                self,
+                "发现新版本",
+                f"发现新版本 {update_info['latest_version']}\n"
+                f"当前版本 {update_info['current_version']}\n\n"
+                f"是否前往下载页面？",
+                QMessageBox.Yes | QMessageBox.No
+            )
+            if reply == QMessageBox.Yes:
+                import webbrowser
+                webbrowser.open(update_info['download_url'])
+        else:
+            QMessageBox.information(
+                self,
+                "已是最新版本",
+                f"当前版本 {update_info['current_version']} 已是最新版本"
+            )
+
+
+def main():
+    """主函数"""
+    app = QApplication(sys.argv)
+
+    # 设置应用程序样式
+    app.setStyle('Fusion')
+
+    window = FlashClientGUI()
+    window.show()
+
+    sys.exit(app.exec_())
+
+
+if __name__ == '__main__':
+    main()
