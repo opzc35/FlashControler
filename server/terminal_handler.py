@@ -1,6 +1,7 @@
 """
 终端处理器
 处理远程终端的输入输出
+支持UTF-8编码，正确显示中文
 """
 import os
 import pty
@@ -8,6 +9,7 @@ import select
 import subprocess
 import threading
 import sys
+import locale
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -33,12 +35,28 @@ class TerminalHandler:
             # 创建伪终端
             self.master_fd, self.slave_fd = pty.openpty()
 
+            # 设置环境变量，确保UTF-8编码支持中文
+            env = os.environ.copy()
+            env['LANG'] = 'zh_CN.UTF-8'
+            env['LC_ALL'] = 'zh_CN.UTF-8'
+            env['TERM'] = 'xterm-256color'
+
+            # 如果系统没有中文locale，回退到英文UTF-8
+            try:
+                import locale
+                locale.setlocale(locale.LC_ALL, 'zh_CN.UTF-8')
+            except:
+                env['LANG'] = 'en_US.UTF-8'
+                env['LC_ALL'] = 'en_US.UTF-8'
+                print("[终端] 警告：系统不支持中文locale，使用英文UTF-8")
+
             # 启动shell进程
             self.process = subprocess.Popen(
-                ['/bin/bash'],
+                ['/bin/bash', '--login'],  # 使用登录shell，加载完整环境
                 stdin=self.slave_fd,
                 stdout=self.slave_fd,
                 stderr=self.slave_fd,
+                env=env,  # 传递环境变量
                 preexec_fn=os.setsid
             )
 
@@ -49,7 +67,7 @@ class TerminalHandler:
             self.output_thread.daemon = True
             self.output_thread.start()
 
-            print("[终端] 终端会话已启动")
+            print("[终端] 终端会话已启动（UTF-8编码）")
 
         except Exception as e:
             print(f"[错误] 启动终端失败: {e}")

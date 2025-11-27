@@ -171,7 +171,15 @@ class FlashClientGUI(QMainWindow):
         # 终端输出区域
         self.terminal_output = QTextEdit()
         self.terminal_output.setReadOnly(True)
-        self.terminal_output.setFont(QFont("Consolas", 10))
+
+        # 使用支持中文的等宽字体
+        # 优先使用中文等宽字体，回退到Consolas
+        terminal_font = QFont()
+        terminal_font.setStyleHint(QFont.Monospace)
+        terminal_font.setFamily("Microsoft YaHei Mono, Consolas, Monaco, Courier New")
+        terminal_font.setPointSize(10)
+        self.terminal_output.setFont(terminal_font)
+
         self.terminal_output.setStyleSheet("""
             QTextEdit {
                 background-color: #1e1e1e;
@@ -550,9 +558,16 @@ class FlashClientGUI(QMainWindow):
         """终端输出回调"""
         if isinstance(output, bytes):
             try:
+                # 优先尝试UTF-8解码
                 output = output.decode('utf-8')
-            except:
-                output = output.decode('utf-8', errors='ignore')
+            except UnicodeDecodeError:
+                try:
+                    # 如果UTF-8失败，尝试GBK（中文Windows环境）
+                    output = output.decode('gbk')
+                except UnicodeDecodeError:
+                    # 最后使用替换模式，避免程序崩溃
+                    output = output.decode('utf-8', errors='replace')
+                    print("[警告] 终端输出包含无法识别的字符，已使用替换字符")
 
         self.append_terminal_output(output)
 

@@ -40,14 +40,22 @@ https://github.com/yourname/FlashControler/archive/main.zip
 nano config/settings.json
 ```
 
-2. 修改密码（重要！）：
+2. 修改服务端配置（**重要！**）：
 ```json
 {
     "server": {
-        "password": "your_secure_password_here"
+        "_comment": "【Linux服务端配置】仅服务端使用",
+        "host": "0.0.0.0",              // 监听所有网卡（通常不需要改）
+        "port": 9999,                    // 监听端口（可自定义）
+        "password": "your_secure_password_here"  // ⚠️ 必须修改这个密码！
     }
 }
 ```
+
+**配置说明：**
+- `host`: 服务器监听地址，`0.0.0.0` 表示监听所有网络接口
+- `port`: 服务器端口，客户端将连接此端口
+- `password`: 连接密码，**务必修改为强密码**
 
 3. 保存并退出（Ctrl+O, Enter, Ctrl+X）
 
@@ -96,14 +104,18 @@ python start_client.py
 
 ### Step 7: 连接到服务器
 
-1. 在客户端界面输入：
-   - **服务器地址**：Linux服务器的IP（如：192.168.1.100）
-   - **端口**：9999（默认）
-   - **密码**：你在Step 3设置的密码
+1. 在客户端界面输入（这些是**客户端连接参数**，不是配置文件）：
+   - **服务器地址**：Linux服务器的IP地址（如：192.168.1.100）
+   - **端口**：9999（与服务端配置的port一致）
+   - **密码**：你在Step 3设置的服务端密码
 
 2. 点击"连接"按钮
 
 3. 看到"已连接"提示即成功！
+
+**说明：**
+- 客户端会自动保存上次连接的地址到 `client.last_host` 和 `client.last_port`
+- 下次启动时会自动填充这些信息
 
 ## 快速测试
 

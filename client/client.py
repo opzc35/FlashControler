@@ -291,9 +291,16 @@ class FlashClientGUI:
         """终端输出回调"""
         if isinstance(output, bytes):
             try:
+                # 优先尝试UTF-8解码
                 output = output.decode('utf-8')
-            except:
-                output = output.decode('utf-8', errors='ignore')
+            except UnicodeDecodeError:
+                try:
+                    # 如果UTF-8失败，尝试GBK（中文Windows环境）
+                    output = output.decode('gbk')
+                except UnicodeDecodeError:
+                    # 最后使用替换模式，避免程序崩溃
+                    output = output.decode('utf-8', errors='replace')
+                    print("[警告] 终端输出包含无法识别的字符")
 
         self.root.after(0, self.append_terminal_output, output)
 

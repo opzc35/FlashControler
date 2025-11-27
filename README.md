@@ -96,27 +96,68 @@ python client/client.py
 
 ## 配置说明
 
-`config/settings.json` 配置文件说明：
+`config/settings.json` 配置文件详细说明：
 
+### 服务端配置（server）- 仅Linux服务端使用
+
+| 配置项 | 说明 | 默认值 | 使用端 |
+|-------|------|--------|--------|
+| `host` | 服务器监听地址<br>0.0.0.0表示监听所有网卡 | "0.0.0.0" | **服务端** |
+| `port` | 服务器监听端口<br>客户端需要连接此端口 | 9999 | **服务端** |
+| `password` | 连接密码<br>**必须修改！**客户端需要提供相同密码 | "flashcontrol123" | **服务端** |
+
+### 客户端配置（client）- 仅Windows客户端使用
+
+| 配置项 | 说明 | 默认值 | 使用端 |
+|-------|------|--------|--------|
+| `last_host` | 上次连接的服务器IP地址<br>自动保存，方便下次使用 | "" | **客户端** |
+| `last_port` | 上次连接的端口号<br>自动保存 | 9999 | **客户端** |
+| `auto_reconnect` | 是否自动重连<br>（暂未实现，预留） | true | **客户端** |
+
+### 更新配置（update）- 客户端和服务端共用
+
+| 配置项 | 说明 | 默认值 | 使用端 |
+|-------|------|--------|--------|
+| `check_on_startup` | 启动时是否自动检查更新 | true | **双端** |
+| `update_url` | 更新检查的API地址<br>用于获取最新版本信息 | GitHub API | **双端** |
+| `current_version` | 当前程序版本号 | "1.0.0" | **双端** |
+
+### 终端配置（terminal）- 仅Linux服务端使用
+
+| 配置项 | 说明 | 默认值 | 使用端 |
+|-------|------|--------|--------|
+| `shell` | 使用的Shell程序路径 | "/bin/bash" | **服务端** |
+| `encoding` | 终端编码格式 | "utf-8" | **服务端** |
+
+### 配置示例
+
+**Linux服务端 - 最小配置：**
 ```json
 {
     "server": {
-        "host": "0.0.0.0",        // 服务器监听地址
-        "port": 9999,              // 服务器端口
-        "password": "your_password" // 连接密码（请修改）
-    },
-    "client": {
-        "last_host": "",           // 上次连接的服务器地址
-        "last_port": 9999,         // 上次连接的端口
-        "auto_reconnect": true     // 是否自动重连
-    },
-    "update": {
-        "check_on_startup": true,  // 启动时检查更新
-        "update_url": "...",       // 更新检查URL
-        "current_version": "1.0.0" // 当前版本
+        "host": "0.0.0.0",
+        "port": 9999,
+        "password": "your_secure_password_here"  // 务必修改！
     }
 }
 ```
+
+**Windows客户端 - 最小配置：**
+```json
+{
+    "client": {
+        "last_host": "192.168.1.100",  // 服务器IP
+        "last_port": 9999
+    }
+}
+```
+
+### 配置文件位置
+
+- **Linux**: `/path/to/FlashControler/config/settings.json`
+- **Windows**: `C:\path\to\FlashControler\config\settings.json`
+
+注意：客户端和服务端可以共用同一个配置文件，程序会自动读取对应部分
 
 ## 项目结构
 
@@ -174,10 +215,26 @@ A: 确保：
 - 文件大小不超过系统限制
 - 网络连接稳定
 
+### Q: 终端显示乱码？
+A: 这是中文编码问题，已修复！
+- **服务端**: 自动设置UTF-8 locale（zh_CN.UTF-8）
+- **客户端**: 使用支持中文的字体
+- **详细说明**: 查看 [ENCODING_FIX.md](ENCODING_FIX.md)
+
+如果仍有问题：
+```bash
+# Linux服务器上检查locale
+locale | grep UTF-8
+
+# 如果没有，安装中文语言包
+sudo apt install language-pack-zh-hans
+sudo locale-gen zh_CN.UTF-8
+```
+
 ### Q: 终端无输出？
 A: 尝试：
 - 发送简单命令如 `ls` 测试
-- 检查终端编码设置
+- 检查网络连接
 - 重新连接服务器
 
 ## 开发计划
@@ -208,6 +265,8 @@ A: 尝试：
 - 📖 [README.md](README.md) - 项目概述和基本使用
 - 🚀 [QUICKSTART.md](QUICKSTART.md) - 5分钟快速开始
 - 🔧 [INSTALL.md](INSTALL.md) - 详细安装指南
+- ⚙️ [CONFIG.md](CONFIG.md) - 配置文件详细说明（服务端/客户端配置区分）
+- 🔤 [ENCODING_FIX.md](ENCODING_FIX.md) - 终端乱码修复说明（UTF-8中文支持）
 - ⭐ [FEATURES.md](FEATURES.md) - 功能特性详解
 - 📝 [CHANGELOG.md](CHANGELOG.md) - 版本更新日志
 - 📄 [LICENSE](LICENSE) - MIT开源许可证
