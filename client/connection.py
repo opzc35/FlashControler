@@ -5,6 +5,8 @@ import socket
 import threading
 import sys
 import os
+import queue
+import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -19,6 +21,9 @@ class ClientConnection:
         self.connected = False
         self.receive_thread = None
         self.callbacks = {}
+        # 添加文件传输消息队列
+        self.file_transfer_queue = queue.Queue()
+        self.uploading = False  # 标记是否正在上传
 
     def connect(self, host, port, password):
         """连接到服务器"""
@@ -82,9 +87,24 @@ class ClientConnection:
             return False, "未连接到服务器"
 
         try:
+            # 设置上传标志
+            self.uploading = True
+            # 清空队列
+            while not self.file_transfer_queue.empty():
+                try:
+                    self.file_transfer_queue.get_nowait()
+                except:
+                    break
+
             # 获取文件信息
+            print(f"[DEBUG] file_path = {repr(file_path)}")
+            print(f"[DEBUG] target_path = {repr(target_path)}")
+
             filename = os.path.basename(file_path)
             file_size = os.path.getsize(file_path)
+
+            print(f"[DEBUG] filename = {repr(filename)}")
+            print(f"[DEBUG] file_size = {file_size}")
 
             # 发送文件上传请求
             file_info = {
@@ -92,13 +112,19 @@ class ClientConnection:
                 'target_path': target_path,
                 'size': file_size
             }
+            print(f"[DEBUG] file_info = {file_info}")
             msg = Protocol.pack_message(Protocol.MSG_FILE_UPLOAD, file_info)
             self.socket.send(msg)
 
-            # 等待服务器准备好
-            msg_type, payload = Protocol.receive_message(self.socket)
-            if msg_type != Protocol.MSG_FILE_UPLOAD or payload.get('status') != 'ready':
-                return False, "服务器未准备好接收文件"
+            # 从队列等待服务器准备好（超时10秒）
+            try:
+                msg_type, payload = self.file_transfer_queue.get(timeout=10)
+                if msg_type != Protocol.MSG_FILE_UPLOAD or payload.get('status') != 'ready':
+                    self.uploading = False
+                    return False, "服务器未准备好接收文件"
+            except queue.Empty:
+                self.uploading = False
+                return False, "等待服务器响应超时"
 
             # 读取并发送文件数据
             with open(file_path, 'rb') as f:
@@ -127,14 +153,20 @@ class ClientConnection:
             complete_msg = Protocol.pack_message(Protocol.MSG_FILE_COMPLETE, {})
             self.socket.send(complete_msg)
 
-            # 等待确认
-            msg_type, payload = Protocol.receive_message(self.socket)
-            if msg_type == Protocol.MSG_FILE_COMPLETE and payload.get('status') == 'success':
-                return True, f"文件上传成功: {payload.get('path')}"
-            else:
-                return False, "文件上传失败"
+            # 从队列等待确认（超时10秒）
+            try:
+                msg_type, payload = self.file_transfer_queue.get(timeout=10)
+                self.uploading = False
+                if msg_type == Protocol.MSG_FILE_COMPLETE and payload.get('status') == 'success':
+                    return True, f"文件上传成功: {payload.get('path')}"
+                else:
+                    return False, "文件上传失败"
+            except queue.Empty:
+                self.uploading = False
+                return False, "等待服务器确认超时"
 
         except Exception as e:
+            self.uploading = False
             return False, f"上传文件失败: {str(e)}"
 
     def check_update(self):
@@ -167,8 +199,12 @@ class ClientConnection:
                         self.callbacks['disconnected']()
                     break
 
+                # 文件传输相关消息 - 放入队列
+                if self.uploading and msg_type in (Protocol.MSG_FILE_UPLOAD, Protocol.MSG_FILE_COMPLETE):
+                    self.file_transfer_queue.put((msg_type, payload))
+
                 # 终端输出
-                if msg_type == Protocol.MSG_TERMINAL_OUTPUT:
+                elif msg_type == Protocol.MSG_TERMINAL_OUTPUT:
                     if 'terminal_output' in self.callbacks:
                         self.callbacks['terminal_output'](payload)
 

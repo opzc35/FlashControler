@@ -23,8 +23,8 @@ class FileHandler:
     def handle_upload_start(self, file_info):
         """处理文件上传开始"""
         try:
-            filename = file_info.get('filename', 'unknown')
-            target_path = file_info.get('target_path', '/tmp')
+            filename = file_info.get('filename') or 'unknown'
+            target_path = file_info.get('target_path') or '/tmp'
             self.total_size = file_info.get('size', 0)
             self.received_size = 0
 
