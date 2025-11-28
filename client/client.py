@@ -7,6 +7,7 @@ from tkinter import ttk, scrolledtext, filedialog, messagebox
 import threading
 import sys
 import os
+import re
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -17,6 +18,9 @@ from common.config import Config
 
 class FlashClientGUI:
     """FlashControler客户端GUI"""
+
+    # ANSI转义序列正则表达式（用于过滤终端控制码）
+    ANSI_ESCAPE_PATTERN = re.compile(r'\x1b\[[0-9;]*[a-zA-Z]|\x1b\][0-9;]*;[^\x07]*\x07|\x1b\][^\x07]*\x07|\x1b\[\?[0-9;]*[a-zA-Z]|\x1b[=>]|\r')
 
     def __init__(self, root):
         self.root = root
@@ -302,7 +306,23 @@ class FlashClientGUI:
                     output = output.decode('utf-8', errors='replace')
                     print("[警告] 终端输出包含无法识别的字符")
 
+        # 过滤ANSI转义序列（终端控制码）
+        output = self.strip_ansi_codes(output)
+
         self.root.after(0, self.append_terminal_output, output)
+
+    @staticmethod
+    def strip_ansi_codes(text):
+        """移除ANSI转义序列
+
+        移除常见的ANSI控制码，包括：
+        - 颜色控制码
+        - 光标移动
+        - 屏幕清除
+        - bracketed paste mode ([?2004h/l)
+        - 其他终端控制序列
+        """
+        return FlashClientGUI.ANSI_ESCAPE_PATTERN.sub('', text)
 
     def append_terminal_output(self, text):
         """追加终端输出"""
