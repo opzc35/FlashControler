@@ -5,6 +5,8 @@
 ## 功能特性
 
 - **远程终端访问**：在Windows客户端直接连接并控制Linux主机的终端
+  - ⌨️ **命令历史记忆**：↑↓箭头键快速切换历史命令（V1.0.3新增）
+  - 自动保存最近100条命令，智能去重
 - **快速文件传输**：轻松将文件从Windows上传到Linux的指定目录
 - **自动更新系统**：检测新版本并提示用户更新
 - **安全认证**：密码保护的连接，确保安全性
@@ -92,6 +94,7 @@ python client/client.py
 2. 输入连接密码
 3. 点击"连接"按钮
 4. 使用"远程终端"标签页执行命令
+   - 💡 **提示**：使用 ↑↓ 箭头键快速切换历史命令
 5. 使用"文件传输"标签页上传文件
 
 ## 配置说明
@@ -266,6 +269,7 @@ A: 尝试：
 - 🚀 [QUICKSTART.md](QUICKSTART.md) - 5分钟快速开始
 - 🔧 [INSTALL.md](INSTALL.md) - 详细安装指南
 - ⚙️ [CONFIG.md](CONFIG.md) - 配置文件详细说明（服务端/客户端配置区分）
+- ⌨️ [COMMAND_HISTORY.md](COMMAND_HISTORY.md) - 命令历史功能说明 **NEW**
 - 🔤 [ENCODING_FIX.md](ENCODING_FIX.md) - 终端乱码修复说明（UTF-8中文支持）
 - ⭐ [FEATURES.md](FEATURES.md) - 功能特性详解
 - 📝 [CHANGELOG.md](CHANGELOG.md) - 版本更新日志

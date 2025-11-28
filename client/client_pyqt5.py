@@ -19,6 +19,86 @@ from client.update_manager import UpdateManager
 from common.config import Config
 
 
+class CommandLineEdit(QLineEdit):
+    """带命令历史功能的输入框"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.command_history = []  # 命令历史列表
+        self.history_index = -1  # 当前历史索引（-1表示不在历史中）
+        self.current_input = ""  # 临时保存当前输入
+        self.max_history = 100  # 最大历史记录数
+
+    def add_to_history(self, command):
+        """添加命令到历史"""
+        command = command.strip()
+        if not command:
+            return
+
+        # 避免重复连续命令
+        if self.command_history and self.command_history[-1] == command:
+            return
+
+        # 如果命令已存在，先移除旧的
+        if command in self.command_history:
+            self.command_history.remove(command)
+
+        # 添加到历史末尾
+        self.command_history.append(command)
+
+        # 限制历史记录数量
+        if len(self.command_history) > self.max_history:
+            self.command_history.pop(0)
+
+        # 重置索引
+        self.history_index = -1
+
+    def keyPressEvent(self, event):
+        """处理按键事件"""
+        if event.key() == Qt.Key_Up:
+            # 上箭头：向前浏览历史（从新到旧）
+            self.navigate_history_up()
+        elif event.key() == Qt.Key_Down:
+            # 下箭头：向后浏览历史（从旧到新）
+            self.navigate_history_down()
+        else:
+            # 其他键：重置历史浏览
+            if self.history_index == -1:
+                super().keyPressEvent(event)
+            else:
+                # 如果在浏览历史时输入，退出历史模式
+                self.history_index = -1
+                super().keyPressEvent(event)
+
+    def navigate_history_up(self):
+        """向前浏览历史"""
+        if not self.command_history:
+            return
+
+        # 第一次按上箭头，保存当前输入
+        if self.history_index == -1:
+            self.current_input = self.text()
+            self.history_index = len(self.command_history) - 1
+        elif self.history_index > 0:
+            self.history_index -= 1
+
+        # 显示历史命令
+        self.setText(self.command_history[self.history_index])
+
+    def navigate_history_down(self):
+        """向后浏览历史"""
+        if self.history_index == -1:
+            return
+
+        if self.history_index < len(self.command_history) - 1:
+            self.history_index += 1
+            self.setText(self.command_history[self.history_index])
+        else:
+            # 到达末尾，恢复当前输入
+            self.history_index = -1
+            self.setText(self.current_input)
+
+
 class ConnectionThread(QThread):
     """连接线程"""
     result = pyqtSignal(bool, str)
@@ -202,8 +282,8 @@ class FlashClientGUI(QMainWindow):
 
         input_layout.addWidget(QLabel("命令:"))
 
-        self.terminal_input = QLineEdit()
-        self.terminal_input.setPlaceholderText("输入命令，按Enter发送...")
+        self.terminal_input = CommandLineEdit()
+        self.terminal_input.setPlaceholderText("输入命令，按Enter发送（↑↓键切换历史）...")
         self.terminal_input.returnPressed.connect(self.send_terminal_command)
         input_layout.addWidget(self.terminal_input)
 
@@ -552,6 +632,9 @@ class FlashClientGUI(QMainWindow):
 
         command = self.terminal_input.text()
         if command:
+            # 添加到命令历史
+            self.terminal_input.add_to_history(command)
+
             if not command.endswith('\n'):
                 command += '\n'
 
