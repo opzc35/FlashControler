@@ -27,6 +27,7 @@ class ClientConnection:
         # 添加目录列表消息队列
         self.dir_list_queue = queue.Queue()
         self.listing_dir = False  # 标记是否正在获取目录列表
+        self.dir_list_lock = threading.Lock()  # 目录列表请求锁
 
     def connect(self, host, port, password):
         """连接到服务器"""
@@ -183,37 +184,39 @@ class ClientConnection:
         if not self.connected:
             return None, "未连接到服务器"
 
-        try:
-            # 设置列表标志
-            self.listing_dir = True
-            # 清空队列
-            while not self.dir_list_queue.empty():
-                try:
-                    self.dir_list_queue.get_nowait()
-                except:
-                    break
-
-            # 发送目录列表请求
-            msg = Protocol.pack_message(Protocol.MSG_LIST_DIR, {'path': path})
-            self.socket.send(msg)
-
-            # 从队列等待响应（超时5秒）
+        # 使用锁确保一次只有一个目录列表请求
+        with self.dir_list_lock:
             try:
-                msg_type, payload = self.dir_list_queue.get(timeout=5)
-                self.listing_dir = False
-                if msg_type == Protocol.MSG_LIST_DIR:
-                    return payload, None
-                elif msg_type == Protocol.MSG_ERROR:
-                    return None, payload.get('error', '未知错误')
-                else:
-                    return None, "响应格式错误"
-            except queue.Empty:
-                self.listing_dir = False
-                return None, "等待服务器响应超时"
+                # 设置列表标志
+                self.listing_dir = True
+                # 清空队列
+                while not self.dir_list_queue.empty():
+                    try:
+                        self.dir_list_queue.get_nowait()
+                    except:
+                        break
 
-        except Exception as e:
-            self.listing_dir = False
-            return None, f"获取目录列表失败: {str(e)}"
+                # 发送目录列表请求
+                msg = Protocol.pack_message(Protocol.MSG_LIST_DIR, {'path': path})
+                self.socket.send(msg)
+
+                # 从队列等待响应（超时10秒，增加超时时间）
+                try:
+                    msg_type, payload = self.dir_list_queue.get(timeout=10)
+                    self.listing_dir = False
+                    if msg_type == Protocol.MSG_LIST_DIR:
+                        return payload, None
+                    elif msg_type == Protocol.MSG_ERROR:
+                        return None, payload.get('error', '未知错误')
+                    else:
+                        return None, "响应格式错误"
+                except queue.Empty:
+                    self.listing_dir = False
+                    return None, "等待服务器响应超时"
+
+            except Exception as e:
+                self.listing_dir = False
+                return None, f"获取目录列表失败: {str(e)}"
 
     def register_callback(self, event, callback):
         """注册回调函数"""

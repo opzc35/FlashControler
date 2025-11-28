@@ -413,6 +413,11 @@ class FlashClientGUI(QMainWindow):
     # ANSI转义序列正则表达式（用于过滤终端控制码）
     ANSI_ESCAPE_PATTERN = re.compile(r'\x1b\[[0-9;]*[a-zA-Z]|\x1b\][0-9;]*;[^\x07]*\x07|\x1b\][^\x07]*\x07|\x1b\[\?[0-9;]*[a-zA-Z]|\x1b[=>]|\r')
 
+    # 定义信号（用于线程安全的GUI更新）
+    terminal_output_signal = pyqtSignal(str)
+    disconnected_signal = pyqtSignal()
+    file_progress_signal = pyqtSignal(float, int, int)
+
     def __init__(self):
         super().__init__()
 
@@ -425,6 +430,7 @@ class FlashClientGUI(QMainWindow):
 
         self.setup_ui()
         self.setup_callbacks()
+        self.setup_signals()  # 连接信号到槽
         self.apply_styles()
 
         # 启动时检查更新
@@ -819,10 +825,31 @@ class FlashClientGUI(QMainWindow):
         """)
 
     def setup_callbacks(self):
-        """设置回调函数"""
-        self.connection.register_callback('terminal_output', self.on_terminal_output)
-        self.connection.register_callback('disconnected', self.on_disconnected)
-        self.connection.register_callback('file_progress', self.on_file_progress)
+        """设置回调函数 - 使用信号来确保线程安全"""
+        # 使用 lambda 来发射信号，而不是直接调用方法
+        self.connection.register_callback('terminal_output', lambda output: self.terminal_output_signal.emit(self._process_output(output)))
+        self.connection.register_callback('disconnected', lambda: self.disconnected_signal.emit())
+        self.connection.register_callback('file_progress', lambda p, s, t: self.file_progress_signal.emit(p, s, t))
+
+    def setup_signals(self):
+        """连接信号到槽函数"""
+        self.terminal_output_signal.connect(self.append_terminal_output)
+        self.disconnected_signal.connect(self.on_disconnected)
+        self.file_progress_signal.connect(self.on_file_progress)
+
+    def _process_output(self, output):
+        """处理输出数据（在接收线程中调用）"""
+        if isinstance(output, bytes):
+            try:
+                output = output.decode('utf-8')
+            except UnicodeDecodeError:
+                try:
+                    output = output.decode('gbk')
+                except UnicodeDecodeError:
+                    output = output.decode('utf-8', errors='replace')
+
+        # 过滤ANSI转义序列
+        return self.strip_ansi_codes(output)
 
     def toggle_connection(self):
         """切换连接状态"""
@@ -917,26 +944,6 @@ class FlashClientGUI(QMainWindow):
             self.connection.send_terminal_input(command)
             self.terminal_input.clear()
 
-    def on_terminal_output(self, output):
-        """终端输出回调"""
-        if isinstance(output, bytes):
-            try:
-                # 优先尝试UTF-8解码
-                output = output.decode('utf-8')
-            except UnicodeDecodeError:
-                try:
-                    # 如果UTF-8失败，尝试GBK（中文Windows环境）
-                    output = output.decode('gbk')
-                except UnicodeDecodeError:
-                    # 最后使用替换模式，避免程序崩溃
-                    output = output.decode('utf-8', errors='replace')
-                    print("[警告] 终端输出包含无法识别的字符，已使用替换字符")
-
-        # 过滤ANSI转义序列（终端控制码）
-        output = self.strip_ansi_codes(output)
-
-        self.append_terminal_output(output)
-
     @staticmethod
     def strip_ansi_codes(text):
         """移除ANSI转义序列
@@ -951,7 +958,7 @@ class FlashClientGUI(QMainWindow):
         return FlashClientGUI.ANSI_ESCAPE_PATTERN.sub('', text)
 
     def append_terminal_output(self, text):
-        """追加终端输出"""
+        """追加终端输出（在主线程中调用）"""
         self.terminal_output.moveCursor(QTextCursor.End)
         self.terminal_output.insertPlainText(text)
         self.terminal_output.moveCursor(QTextCursor.End)
