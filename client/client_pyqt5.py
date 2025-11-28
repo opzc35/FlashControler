@@ -9,7 +9,8 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QHBoxLayout, QTabWidget, QLabel, QLineEdit,
                              QPushButton, QTextEdit, QFileDialog, QProgressBar,
                              QMessageBox, QGroupBox, QGridLayout, QSplitter,
-                             QDialog, QListWidget, QListWidgetItem)
+                             QDialog, QListWidget, QListWidgetItem, QTreeWidget,
+                             QTreeWidgetItem)
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer
 from PyQt5.QtGui import QFont, QIcon, QPalette, QColor, QTextCursor, QKeySequence
 
@@ -124,6 +125,141 @@ class HistoryDialog(QDialog):
             self.accept()
         else:
             QMessageBox.warning(self, "未选择", "请先选择一条命令")
+
+
+class RemoteDirDialog(QDialog):
+    """远程目录选择对话框"""
+
+    def __init__(self, connection, parent=None):
+        super().__init__(parent)
+        self.connection = connection
+        self.selected_path = None
+
+        self.setWindowTitle("选择远程目录")
+        self.setModal(True)
+        self.resize(500, 600)
+
+        self.setup_ui()
+        self.load_directory("/")
+
+    def setup_ui(self):
+        """设置UI"""
+        layout = QVBoxLayout(self)
+
+        # 当前路径显示
+        path_layout = QHBoxLayout()
+        path_layout.addWidget(QLabel("当前路径:"))
+        self.current_path_label = QLabel("/")
+        self.current_path_label.setStyleSheet("font-weight: bold; color: #2c3e50;")
+        path_layout.addWidget(self.current_path_label)
+        path_layout.addStretch()
+        layout.addLayout(path_layout)
+
+        # 目录树
+        self.tree = QTreeWidget()
+        self.tree.setHeaderLabels(["目录名"])
+        self.tree.itemDoubleClicked.connect(self.on_item_double_clicked)
+        self.tree.setStyleSheet("""
+            QTreeWidget {
+                border: 2px solid #dcdde1;
+                border-radius: 5px;
+                background-color: white;
+                font-size: 11px;
+            }
+            QTreeWidget::item {
+                padding: 5px;
+            }
+            QTreeWidget::item:selected {
+                background-color: #3498db;
+                color: white;
+            }
+        """)
+        layout.addWidget(self.tree)
+
+        # 按钮区域
+        button_layout = QHBoxLayout()
+
+        # 刷新按钮
+        refresh_btn = QPushButton("🔄 刷新")
+        refresh_btn.clicked.connect(self.refresh_current)
+        button_layout.addWidget(refresh_btn)
+
+        # 选择按钮
+        select_btn = QPushButton("✓ 选择此目录")
+        select_btn.clicked.connect(self.select_current)
+        button_layout.addWidget(select_btn)
+
+        # 取消按钮
+        cancel_btn = QPushButton("取消")
+        cancel_btn.clicked.connect(self.reject)
+        button_layout.addWidget(cancel_btn)
+
+        layout.addLayout(button_layout)
+
+        # 应用样式
+        self.setStyleSheet("""
+            QPushButton {
+                background-color: #3498db;
+                color: white;
+                border: none;
+                border-radius: 5px;
+                padding: 8px 15px;
+                font-weight: bold;
+                min-height: 30px;
+            }
+            QPushButton:hover {
+                background-color: #2980b9;
+            }
+            QPushButton:pressed {
+                background-color: #21618c;
+            }
+        """)
+
+    def load_directory(self, path):
+        """加载目录内容"""
+        self.tree.clear()
+        self.current_path_label.setText(path)
+
+        # 添加上级目录项（如果不是根目录）
+        if path != "/":
+            parent_item = QTreeWidgetItem(self.tree, [".. (上级目录)"])
+            parent_item.setData(0, Qt.UserRole, os.path.dirname(path))
+
+        # 获取目录列表
+        result, error = self.connection.list_dir(path)
+        if error:
+            QMessageBox.warning(self, "错误", f"无法加载目录: {error}")
+            return
+
+        items = result.get('items', [])
+        if not items:
+            # 显示空目录提示
+            empty_item = QTreeWidgetItem(self.tree, ["(空目录)"])
+            empty_item.setDisabled(True)
+        else:
+            for item in items:
+                tree_item = QTreeWidgetItem(self.tree, [f"📁 {item['name']}"])
+                tree_item.setData(0, Qt.UserRole, item['path'])
+
+    def on_item_double_clicked(self, item, column):
+        """双击项目时加载该目录"""
+        path = item.data(0, Qt.UserRole)
+        if path:
+            self.load_directory(path)
+
+    def refresh_current(self):
+        """刷新当前目录"""
+        current_path = self.current_path_label.text()
+        self.load_directory(current_path)
+
+    def select_current(self):
+        """选择当前目录"""
+        self.selected_path = self.current_path_label.text()
+        self.accept()
+
+    def get_selected_path(self):
+        """获取选中的路径"""
+        return self.selected_path
 
 
 class CommandLineEdit(QLineEdit):
@@ -473,6 +609,11 @@ class FlashClientGUI(QMainWindow):
         self.target_path_input.setText("/tmp")
         self.target_path_input.setPlaceholderText("Linux服务器上的目标目录...")
         target_layout.addWidget(self.target_path_input)
+
+        self.browse_remote_btn = QPushButton("浏览远程...")
+        self.browse_remote_btn.setMinimumWidth(100)
+        self.browse_remote_btn.clicked.connect(self.browse_remote_dir)
+        target_layout.addWidget(self.browse_remote_btn)
 
         file_select_layout.addWidget(target_container)
 
@@ -833,6 +974,18 @@ class FlashClientGUI(QMainWindow):
         )
         if filename:
             self.file_path_input.setText(filename)
+
+    def browse_remote_dir(self):
+        """浏览远程目录"""
+        if not self.connection.connected:
+            QMessageBox.warning(self, "未连接", "请先连接到服务器")
+            return
+
+        dialog = RemoteDirDialog(self.connection, self)
+        if dialog.exec_() == QDialog.Accepted:
+            selected_path = dialog.get_selected_path()
+            if selected_path:
+                self.target_path_input.setText(selected_path)
 
     def upload_file(self):
         """上传文件"""

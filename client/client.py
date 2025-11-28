@@ -16,6 +16,119 @@ from client.update_manager import UpdateManager
 from common.config import Config
 
 
+class RemoteDirDialog:
+    """远程目录选择对话框"""
+
+    def __init__(self, parent, connection):
+        self.connection = connection
+        self.result = None
+        self.current_path = "/"
+
+        # 创建对话框窗口
+        self.dialog = tk.Toplevel(parent)
+        self.dialog.title("选择远程目录")
+        self.dialog.geometry("500x600")
+        self.dialog.transient(parent)
+        self.dialog.grab_set()
+
+        self.setup_ui()
+        self.load_directory("/")
+
+        # 等待对话框关闭
+        self.dialog.wait_window()
+
+    def setup_ui(self):
+        """设置UI"""
+        main_frame = ttk.Frame(self.dialog, padding="10")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+
+        # 当前路径显示
+        path_frame = ttk.Frame(main_frame)
+        path_frame.pack(fill=tk.X, pady=(0, 10))
+        ttk.Label(path_frame, text="当前路径:").pack(side=tk.LEFT)
+        self.path_label = ttk.Label(path_frame, text="/", font=("", 10, "bold"))
+        self.path_label.pack(side=tk.LEFT, padx=(5, 0))
+
+        # 目录列表
+        list_frame = ttk.Frame(main_frame)
+        list_frame.pack(fill=tk.BOTH, expand=True)
+
+        # 添加滚动条
+        scrollbar = ttk.Scrollbar(list_frame)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        self.dir_listbox = tk.Listbox(list_frame, yscrollcommand=scrollbar.set)
+        self.dir_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.config(command=self.dir_listbox.yview)
+
+        # 双击加载子目录
+        self.dir_listbox.bind('<Double-Button-1>', self.on_double_click)
+
+        # 按钮区域
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(fill=tk.X, pady=(10, 0))
+
+        ttk.Button(button_frame, text="🔄 刷新", command=self.refresh_current).pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Button(button_frame, text="✓ 选择此目录", command=self.select_current).pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Button(button_frame, text="取消", command=self.dialog.destroy).pack(side=tk.LEFT)
+
+    def load_directory(self, path):
+        """加载目录内容"""
+        self.current_path = path
+        self.path_label.config(text=path)
+        self.dir_listbox.delete(0, tk.END)
+
+        # 添加上级目录项（如果不是根目录）
+        if path != "/":
+            self.dir_listbox.insert(tk.END, ".. (上级目录)")
+
+        # 获取目录列表
+        result, error = self.connection.list_dir(path)
+        if error:
+            messagebox.showerror("错误", f"无法加载目录: {error}", parent=self.dialog)
+            return
+
+        items = result.get('items', [])
+        if not items and path == "/":
+            self.dir_listbox.insert(tk.END, "(空目录)")
+        else:
+            for item in items:
+                self.dir_listbox.insert(tk.END, f"📁 {item['name']}")
+
+    def on_double_click(self, event):
+        """双击项目时加载该目录"""
+        selection = self.dir_listbox.curselection()
+        if not selection:
+            return
+
+        index = selection[0]
+        item_text = self.dir_listbox.get(index)
+
+        if item_text == "(空目录)":
+            return
+
+        if item_text == ".. (上级目录)":
+            # 加载上级目录
+            parent_path = os.path.dirname(self.current_path)
+            if parent_path == "":
+                parent_path = "/"
+            self.load_directory(parent_path)
+        else:
+            # 移除前面的emoji符号，获取目录名
+            dir_name = item_text.replace("📁 ", "")
+            new_path = os.path.join(self.current_path, dir_name)
+            self.load_directory(new_path)
+
+    def refresh_current(self):
+        """刷新当前目录"""
+        self.load_directory(self.current_path)
+
+    def select_current(self):
+        """选择当前目录"""
+        self.result = self.current_path
+        self.dialog.destroy()
+
+
 class FlashClientGUI:
     """FlashControler客户端GUI"""
 
@@ -167,6 +280,9 @@ class FlashClientGUI:
         self.target_path_var = tk.StringVar(value="/tmp")
         self.target_path_entry = ttk.Entry(file_frame, textvariable=self.target_path_var, width=50)
         self.target_path_entry.grid(row=1, column=1, padx=5, pady=(10, 0), sticky=(tk.W, tk.E))
+
+        self.browse_remote_btn = ttk.Button(file_frame, text="浏览远程", command=self.browse_remote_dir)
+        self.browse_remote_btn.grid(row=1, column=2, pady=(10, 0))
 
         # 上传按钮
         self.upload_btn = ttk.Button(file_frame, text="上传文件", command=self.upload_file)
@@ -495,6 +611,16 @@ class FlashClientGUI:
         )
         if filename:
             self.file_path_var.set(filename)
+
+    def browse_remote_dir(self):
+        """浏览远程目录"""
+        if not self.connection.connected:
+            messagebox.showwarning("警告", "请先连接到服务器")
+            return
+
+        dialog = RemoteDirDialog(self.root, self.connection)
+        if dialog.result:
+            self.target_path_var.set(dialog.result)
 
     def upload_file(self):
         """上传文件"""

@@ -18,6 +18,7 @@ class Protocol:
     MSG_AUTH = 7              # 认证
     MSG_UPDATE_CHECK = 8      # 检查更新
     MSG_UPDATE_INFO = 9       # 更新信息
+    MSG_LIST_DIR = 10         # 列出目录
     MSG_ERROR = 99            # 错误消息
 
     @staticmethod

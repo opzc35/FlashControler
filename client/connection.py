@@ -24,6 +24,9 @@ class ClientConnection:
         # 添加文件传输消息队列
         self.file_transfer_queue = queue.Queue()
         self.uploading = False  # 标记是否正在上传
+        # 添加目录列表消息队列
+        self.dir_list_queue = queue.Queue()
+        self.listing_dir = False  # 标记是否正在获取目录列表
 
     def connect(self, host, port, password):
         """连接到服务器"""
@@ -97,14 +100,8 @@ class ClientConnection:
                     break
 
             # 获取文件信息
-            print(f"[DEBUG] file_path = {repr(file_path)}")
-            print(f"[DEBUG] target_path = {repr(target_path)}")
-
             filename = os.path.basename(file_path)
             file_size = os.path.getsize(file_path)
-
-            print(f"[DEBUG] filename = {repr(filename)}")
-            print(f"[DEBUG] file_size = {file_size}")
 
             # 发送文件上传请求
             file_info = {
@@ -112,7 +109,6 @@ class ClientConnection:
                 'target_path': target_path,
                 'size': file_size
             }
-            print(f"[DEBUG] file_info = {file_info}")
             msg = Protocol.pack_message(Protocol.MSG_FILE_UPLOAD, file_info)
             self.socket.send(msg)
 
@@ -182,6 +178,43 @@ class ClientConnection:
             print(f"检查更新失败: {e}")
             return False
 
+    def list_dir(self, path='/'):
+        """获取远程目录列表"""
+        if not self.connected:
+            return None, "未连接到服务器"
+
+        try:
+            # 设置列表标志
+            self.listing_dir = True
+            # 清空队列
+            while not self.dir_list_queue.empty():
+                try:
+                    self.dir_list_queue.get_nowait()
+                except:
+                    break
+
+            # 发送目录列表请求
+            msg = Protocol.pack_message(Protocol.MSG_LIST_DIR, {'path': path})
+            self.socket.send(msg)
+
+            # 从队列等待响应（超时5秒）
+            try:
+                msg_type, payload = self.dir_list_queue.get(timeout=5)
+                self.listing_dir = False
+                if msg_type == Protocol.MSG_LIST_DIR:
+                    return payload, None
+                elif msg_type == Protocol.MSG_ERROR:
+                    return None, payload.get('error', '未知错误')
+                else:
+                    return None, "响应格式错误"
+            except queue.Empty:
+                self.listing_dir = False
+                return None, "等待服务器响应超时"
+
+        except Exception as e:
+            self.listing_dir = False
+            return None, f"获取目录列表失败: {str(e)}"
+
     def register_callback(self, event, callback):
         """注册回调函数"""
         self.callbacks[event] = callback
@@ -202,6 +235,10 @@ class ClientConnection:
                 # 文件传输相关消息 - 放入队列
                 if self.uploading and msg_type in (Protocol.MSG_FILE_UPLOAD, Protocol.MSG_FILE_COMPLETE):
                     self.file_transfer_queue.put((msg_type, payload))
+
+                # 目录列表相关消息 - 放入队列
+                elif self.listing_dir and msg_type in (Protocol.MSG_LIST_DIR, Protocol.MSG_ERROR):
+                    self.dir_list_queue.put((msg_type, payload))
 
                 # 终端输出
                 elif msg_type == Protocol.MSG_TERMINAL_OUTPUT:

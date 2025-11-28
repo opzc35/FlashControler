@@ -121,6 +121,10 @@ class FlashServer:
                 elif msg_type == Protocol.MSG_UPDATE_CHECK:
                     self.handle_update_check(client_socket)
 
+                # 列出目录
+                elif msg_type == Protocol.MSG_LIST_DIR:
+                    self.handle_list_dir(client_socket, payload)
+
                 # 心跳包
                 elif msg_type == Protocol.MSG_HEARTBEAT:
                     response = Protocol.pack_message(Protocol.MSG_HEARTBEAT, "pong")
@@ -144,6 +148,64 @@ class FlashServer:
             "update_url": update_url
         })
         client_socket.send(response)
+
+    def handle_list_dir(self, client_socket, payload):
+        """处理目录列表请求"""
+        try:
+            path = payload.get('path', '/') if isinstance(payload, dict) else '/'
+
+            # 确保路径存在且是目录
+            if not os.path.exists(path):
+                response = Protocol.pack_message(Protocol.MSG_ERROR, {
+                    "error": "路径不存在"
+                })
+                client_socket.send(response)
+                return
+
+            if not os.path.isdir(path):
+                response = Protocol.pack_message(Protocol.MSG_ERROR, {
+                    "error": "不是目录"
+                })
+                client_socket.send(response)
+                return
+
+            # 获取目录内容
+            items = []
+            try:
+                for item_name in sorted(os.listdir(path)):
+                    item_path = os.path.join(path, item_name)
+                    try:
+                        is_dir = os.path.isdir(item_path)
+                        # 只添加目录，不添加文件
+                        if is_dir:
+                            items.append({
+                                'name': item_name,
+                                'path': item_path,
+                                'is_dir': True
+                            })
+                    except PermissionError:
+                        # 跳过没有权限的目录
+                        continue
+            except PermissionError:
+                response = Protocol.pack_message(Protocol.MSG_ERROR, {
+                    "error": "权限不足"
+                })
+                client_socket.send(response)
+                return
+
+            # 发送目录列表
+            response = Protocol.pack_message(Protocol.MSG_LIST_DIR, {
+                "path": path,
+                "items": items
+            })
+            client_socket.send(response)
+
+        except Exception as e:
+            print(f"[错误] 列出目录失败: {e}")
+            response = Protocol.pack_message(Protocol.MSG_ERROR, {
+                "error": str(e)
+            })
+            client_socket.send(response)
 
     def stop(self):
         """停止服务器"""
