@@ -1,12 +1,4 @@
-# FlashControler 依赖项
-# Python 3.7+
-
-# 网络和并发
 requests>=2.28.0
-
-# 版本管理
 packaging>=21.0
-
-# GUI框架 (美观的现代化界面)
 PyQt5>=5.15.0
 PyQt5-Qt5>=5.15.0
