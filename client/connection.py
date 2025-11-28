@@ -187,6 +187,7 @@ class ClientConnection:
         # 使用锁确保一次只有一个目录列表请求
         with self.dir_list_lock:
             try:
+                print(f"[DEBUG] 开始请求目录列表: {path}")
                 # 设置列表标志
                 self.listing_dir = True
                 # 清空队列
@@ -199,10 +200,12 @@ class ClientConnection:
                 # 发送目录列表请求
                 msg = Protocol.pack_message(Protocol.MSG_LIST_DIR, {'path': path})
                 self.socket.send(msg)
+                print(f"[DEBUG] 已发送目录列表请求，等待响应...")
 
                 # 从队列等待响应（超时10秒，增加超时时间）
                 try:
                     msg_type, payload = self.dir_list_queue.get(timeout=10)
+                    print(f"[DEBUG] 收到响应: msg_type={msg_type}, payload={payload}")
                     self.listing_dir = False
                     if msg_type == Protocol.MSG_LIST_DIR:
                         return payload, None
@@ -212,10 +215,12 @@ class ClientConnection:
                         return None, "响应格式错误"
                 except queue.Empty:
                     self.listing_dir = False
+                    print(f"[DEBUG] 等待响应超时！listing_dir={self.listing_dir}")
                     return None, "等待服务器响应超时"
 
             except Exception as e:
                 self.listing_dir = False
+                print(f"[DEBUG] 异常: {e}")
                 return None, f"获取目录列表失败: {str(e)}"
 
     def register_callback(self, event, callback):
@@ -235,12 +240,19 @@ class ClientConnection:
                         self.callbacks['disconnected']()
                     break
 
+                # 打印收到的消息类型（用于调试）
+                if msg_type == Protocol.MSG_LIST_DIR:
+                    print(f"[DEBUG] 接收循环收到 MSG_LIST_DIR 消息, listing_dir={self.listing_dir}")
+                elif msg_type not in (Protocol.MSG_TERMINAL_OUTPUT, Protocol.MSG_HEARTBEAT):
+                    print(f"[DEBUG] 接收循环收到消息: msg_type={msg_type}")
+
                 # 文件传输相关消息 - 放入队列
                 if self.uploading and msg_type in (Protocol.MSG_FILE_UPLOAD, Protocol.MSG_FILE_COMPLETE):
                     self.file_transfer_queue.put((msg_type, payload))
 
                 # 目录列表相关消息 - 放入队列
                 elif self.listing_dir and msg_type in (Protocol.MSG_LIST_DIR, Protocol.MSG_ERROR):
+                    print(f"[DEBUG] 接收到目录列表消息: msg_type={msg_type}, listing_dir={self.listing_dir}")
                     self.dir_list_queue.put((msg_type, payload))
 
                 # 终端输出
