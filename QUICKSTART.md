@@ -24,12 +24,12 @@ sudo apt update && sudo apt install python3 python3-pip
 **在Linux服务器和Windows客户端都执行：**
 
 ```bash
-git clone https://github.com/yourname/FlashControler.git
+git clone https://github.com/opzc35/FlashControler.git
 cd FlashControler
 ```
 
 如果没有git，可以直接下载ZIP：
-https://github.com/yourname/FlashControler/archive/main.zip
+https://github.com/opzc35/FlashControler/archive/main.zip
 
 ### Step 3: 配置服务器
 

@@ -8,15 +8,122 @@ import re
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QHBoxLayout, QTabWidget, QLabel, QLineEdit,
                              QPushButton, QTextEdit, QFileDialog, QProgressBar,
-                             QMessageBox, QGroupBox, QGridLayout, QSplitter)
+                             QMessageBox, QGroupBox, QGridLayout, QSplitter,
+                             QDialog, QListWidget, QListWidgetItem)
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer
-from PyQt5.QtGui import QFont, QIcon, QPalette, QColor, QTextCursor
+from PyQt5.QtGui import QFont, QIcon, QPalette, QColor, QTextCursor, QKeySequence
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from client.connection import ClientConnection
 from client.update_manager import UpdateManager
 from common.config import Config
+
+
+class HistoryDialog(QDialog):
+    """命令历史选择对话框"""
+
+    def __init__(self, history_list, parent=None):
+        super().__init__(parent)
+        self.selected_command = None
+        self.history_list = history_list
+
+        self.setWindowTitle("命令历史")
+        self.setModal(True)
+        self.resize(600, 400)
+
+        self.setup_ui()
+
+    def setup_ui(self):
+        """设置UI"""
+        layout = QVBoxLayout(self)
+
+        # 说明标签
+        info_label = QLabel("双击命令或选择后点击\"使用\"按钮")
+        info_label.setStyleSheet("color: #7f8c8d; margin-bottom: 10px;")
+        layout.addWidget(info_label)
+
+        # 历史命令列表
+        self.list_widget = QListWidget()
+        self.list_widget.setAlternatingRowColors(True)
+        self.list_widget.setStyleSheet("""
+            QListWidget {
+                border: 2px solid #dcdde1;
+                border-radius: 5px;
+                background-color: white;
+                font-size: 11px;
+            }
+            QListWidget::item {
+                padding: 8px;
+                border-bottom: 1px solid #ecf0f1;
+            }
+            QListWidget::item:selected {
+                background-color: #3498db;
+                color: white;
+            }
+            QListWidget::item:hover {
+                background-color: #ecf0f1;
+            }
+        """)
+
+        # 添加历史命令（从新到旧显示）
+        for cmd in reversed(self.history_list):
+            item = QListWidgetItem(cmd)
+            item.setFont(QFont("Consolas", 10))
+            self.list_widget.addItem(item)
+
+        # 双击选择
+        self.list_widget.itemDoubleClicked.connect(self.on_item_double_clicked)
+        layout.addWidget(self.list_widget)
+
+        # 按钮区域
+        button_layout = QHBoxLayout()
+
+        # 使用按钮
+        use_btn = QPushButton("使用选中的命令")
+        use_btn.setMinimumHeight(35)
+        use_btn.clicked.connect(self.use_selected)
+        button_layout.addWidget(use_btn)
+
+        # 取消按钮
+        cancel_btn = QPushButton("取消")
+        cancel_btn.setMinimumHeight(35)
+        cancel_btn.clicked.connect(self.reject)
+        button_layout.addWidget(cancel_btn)
+
+        layout.addLayout(button_layout)
+
+        # 应用样式
+        self.setStyleSheet("""
+            QPushButton {
+                background-color: #3498db;
+                color: white;
+                border: none;
+                border-radius: 5px;
+                padding: 8px 15px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #2980b9;
+            }
+            QPushButton:pressed {
+                background-color: #21618c;
+            }
+        """)
+
+    def on_item_double_clicked(self, item):
+        """双击项目时选择"""
+        self.selected_command = item.text()
+        self.accept()
+
+    def use_selected(self):
+        """使用选中的命令"""
+        current_item = self.list_widget.currentItem()
+        if current_item:
+            self.selected_command = current_item.text()
+            self.accept()
+        else:
+            QMessageBox.warning(self, "未选择", "请先选择一条命令")
 
 
 class CommandLineEdit(QLineEdit):
@@ -28,6 +135,22 @@ class CommandLineEdit(QLineEdit):
         self.history_index = -1  # 当前历史索引（-1表示不在历史中）
         self.current_input = ""  # 临时保存当前输入
         self.max_history = 100  # 最大历史记录数
+        self.parent_window = parent  # 保存父窗口引用
+
+    def show_history_dialog(self):
+        """显示历史选择对话框"""
+        if not self.command_history:
+            QMessageBox.information(
+                self.parent_window,
+                "命令历史",
+                "还没有历史命令记录"
+            )
+            return
+
+        dialog = HistoryDialog(self.command_history, self.parent_window)
+        if dialog.exec_() == QDialog.Accepted and dialog.selected_command:
+            self.setText(dialog.selected_command)
+            self.setFocus()
 
     def add_to_history(self, command):
         """添加命令到历史"""
@@ -55,6 +178,11 @@ class CommandLineEdit(QLineEdit):
 
     def keyPressEvent(self, event):
         """处理按键事件"""
+        # Ctrl+H: 显示历史对话框
+        if event.modifiers() == Qt.ControlModifier and event.key() == Qt.Key_H:
+            self.show_history_dialog()
+            return
+
         if event.key() == Qt.Key_Up:
             # 上箭头：向前浏览历史（从新到旧）
             self.navigate_history_up()
@@ -282,8 +410,8 @@ class FlashClientGUI(QMainWindow):
 
         input_layout.addWidget(QLabel("命令:"))
 
-        self.terminal_input = CommandLineEdit()
-        self.terminal_input.setPlaceholderText("输入命令，按Enter发送（↑↓键切换历史）...")
+        self.terminal_input = CommandLineEdit(self)
+        self.terminal_input.setPlaceholderText("输入命令，按Enter发送（↑↓键切换历史，Ctrl+H打开历史列表）...")
         self.terminal_input.returnPressed.connect(self.send_terminal_command)
         input_layout.addWidget(self.terminal_input)
 
@@ -291,6 +419,13 @@ class FlashClientGUI(QMainWindow):
         self.send_btn.setMinimumWidth(80)
         self.send_btn.clicked.connect(self.send_terminal_command)
         input_layout.addWidget(self.send_btn)
+
+        # 历史按钮
+        self.history_btn = QPushButton("📜 历史")
+        self.history_btn.setMinimumWidth(80)
+        self.history_btn.setToolTip("查看和选择历史命令 (Ctrl+H)")
+        self.history_btn.clicked.connect(self.show_command_history)
+        input_layout.addWidget(self.history_btn)
 
         self.clear_terminal_btn = QPushButton("清屏")
         self.clear_terminal_btn.setMinimumWidth(80)
@@ -683,6 +818,10 @@ class FlashClientGUI(QMainWindow):
     def clear_terminal(self):
         """清空终端"""
         self.terminal_output.clear()
+
+    def show_command_history(self):
+        """显示命令历史对话框"""
+        self.terminal_input.show_history_dialog()
 
     def browse_file(self):
         """浏览文件"""

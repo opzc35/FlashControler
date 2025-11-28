@@ -6,6 +6,7 @@
 
 - **远程终端访问**：在Windows客户端直接连接并控制Linux主机的终端
   - ⌨️ **命令历史记忆**：↑↓箭头键快速切换历史命令（V1.0.3新增）
+  - 📜 **历史选择对话框**：点击按钮或Ctrl+H从列表选择（V1.0.3新增）
   - 自动保存最近100条命令，智能去重
 - **快速文件传输**：轻松将文件从Windows上传到Linux的指定目录
 - **自动更新系统**：检测新版本并提示用户更新
@@ -47,7 +48,7 @@
 
 1. 克隆仓库：
 ```bash
-git clone https://github.com/yourname/FlashControler.git
+git clone https://github.com/opzc35/FlashControler.git
 cd FlashControler
 ```
 
@@ -80,12 +81,12 @@ python server/server.py
 在Windows机器上运行：
 
 **方式1：使用PyQt5美化界面（推荐）**
-```bash
+```cmd
 python start_client_pyqt5.py
 ```
 
 **方式2：使用tkinter基础界面**
-```bash
+```cmd
 python client/client.py
 ```
 
@@ -95,6 +96,7 @@ python client/client.py
 3. 点击"连接"按钮
 4. 使用"远程终端"标签页执行命令
    - 💡 **提示**：使用 ↑↓ 箭头键快速切换历史命令
+   - 💡 **提示**：点击 📜 **历史** 按钮或按 **Ctrl+H** 从列表选择历史命令
 5. 使用"文件传输"标签页上传文件
 
 ## 配置说明

@@ -132,12 +132,17 @@ class FlashClientGUI:
         self.terminal_input.bind('<Return>', self.send_terminal_command)
         self.terminal_input.bind('<Up>', self.navigate_history_up)
         self.terminal_input.bind('<Down>', self.navigate_history_down)
+        self.terminal_input.bind('<Control-h>', self.show_command_history)
 
         self.send_btn = ttk.Button(input_frame, text="发送", command=self.send_terminal_command)
         self.send_btn.grid(row=0, column=2)
 
+        # 历史按钮
+        self.history_btn = ttk.Button(input_frame, text="📜 历史", command=self.show_command_history)
+        self.history_btn.grid(row=0, column=3, padx=(5, 0))
+
         self.clear_btn = ttk.Button(input_frame, text="清屏", command=self.clear_terminal)
-        self.clear_btn.grid(row=0, column=3, padx=(5, 0))
+        self.clear_btn.grid(row=0, column=4, padx=(5, 0))
 
         input_frame.columnconfigure(1, weight=1)
         terminal_frame.columnconfigure(0, weight=1)
@@ -392,6 +397,86 @@ class FlashClientGUI:
             self.terminal_input.insert(0, self.current_input)
 
         return "break"
+
+    def show_command_history(self, event=None):
+        """显示命令历史选择窗口"""
+        if not self.command_history:
+            messagebox.showinfo("命令历史", "还没有历史命令记录")
+            return "break" if event else None
+
+        # 创建历史选择窗口
+        history_window = tk.Toplevel(self.root)
+        history_window.title("命令历史")
+        history_window.geometry("600x400")
+        history_window.transient(self.root)
+        history_window.grab_set()
+
+        # 说明标签
+        info_label = ttk.Label(
+            history_window,
+            text="双击命令或选择后点击\"使用\"按钮",
+            foreground="#7f8c8d"
+        )
+        info_label.pack(pady=10)
+
+        # 创建列表框架
+        list_frame = ttk.Frame(history_window)
+        list_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+
+        # 滚动条
+        scrollbar = ttk.Scrollbar(list_frame)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # 列表框
+        listbox = tk.Listbox(
+            list_frame,
+            font=("Consolas", 10),
+            yscrollcommand=scrollbar.set,
+            selectmode=tk.SINGLE,
+            activestyle='dotbox'
+        )
+        listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.config(command=listbox.yview)
+
+        # 添加历史命令（从新到旧）
+        for cmd in reversed(self.command_history):
+            listbox.insert(tk.END, cmd)
+
+        def use_selected():
+            """使用选中的命令"""
+            selection = listbox.curselection()
+            if selection:
+                command = listbox.get(selection[0])
+                self.terminal_input.delete(0, tk.END)
+                self.terminal_input.insert(0, command)
+                history_window.destroy()
+                self.terminal_input.focus()
+            else:
+                messagebox.showwarning("未选择", "请先选择一条命令")
+
+        def on_double_click(event):
+            """双击时使用命令"""
+            use_selected()
+
+        # 双击选择
+        listbox.bind('<Double-Button-1>', on_double_click)
+
+        # 按钮区域
+        button_frame = ttk.Frame(history_window)
+        button_frame.pack(pady=10)
+
+        use_btn = ttk.Button(button_frame, text="使用选中的命令", command=use_selected)
+        use_btn.pack(side=tk.LEFT, padx=5)
+
+        cancel_btn = ttk.Button(button_frame, text="取消", command=history_window.destroy)
+        cancel_btn.pack(side=tk.LEFT, padx=5)
+
+        # 选中第一项
+        if listbox.size() > 0:
+            listbox.selection_set(0)
+            listbox.focus()
+
+        return "break" if event else None
 
     def append_terminal_output(self, text):
         """追加终端输出"""
