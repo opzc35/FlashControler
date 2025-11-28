@@ -127,19 +127,43 @@ class HistoryDialog(QDialog):
             QMessageBox.warning(self, "未选择", "请先选择一条命令")
 
 
+class DirLoadThread(QThread):
+    """目录加载线程"""
+    finished = pyqtSignal(str, object, object)  # path, result, error
+
+    def __init__(self, connection, path):
+        super().__init__()
+        self.connection = connection
+        self.path = path
+
+    def run(self):
+        """在后台线程中加载目录"""
+        result, error = self.connection.list_dir(self.path)
+        self.finished.emit(self.path, result, error)
+
+
 class RemoteDirDialog(QDialog):
     """远程目录选择对话框"""
+
+    # 定义信号
+    dir_loaded = pyqtSignal(str, object, object)  # path, result, error
 
     def __init__(self, connection, parent=None):
         super().__init__(parent)
         self.connection = connection
         self.selected_path = None
+        self.loading = False
 
         self.setWindowTitle("选择远程目录")
         self.setModal(True)
         self.resize(500, 600)
 
         self.setup_ui()
+
+        # 连接信号
+        self.dir_loaded.connect(self.on_dir_loaded)
+
+        # 加载根目录
         self.load_directory("/")
 
     def setup_ui(self):
@@ -153,6 +177,12 @@ class RemoteDirDialog(QDialog):
         self.current_path_label.setStyleSheet("font-weight: bold; color: #2c3e50;")
         path_layout.addWidget(self.current_path_label)
         path_layout.addStretch()
+
+        # 加载状态标签
+        self.status_label = QLabel("")
+        self.status_label.setStyleSheet("color: #7f8c8d; font-style: italic;")
+        path_layout.addWidget(self.status_label)
+
         layout.addLayout(path_layout)
 
         # 目录树
@@ -216,20 +246,37 @@ class RemoteDirDialog(QDialog):
         """)
 
     def load_directory(self, path):
-        """加载目录内容"""
+        """加载目录内容（异步）"""
+        if self.loading:
+            return  # 如果正在加载，忽略新请求
+
+        self.loading = True
         self.tree.clear()
         self.current_path_label.setText(path)
+        self.status_label.setText("正在加载...")
+
+        # 禁用按钮
+        self.tree.setEnabled(False)
+
+        # 创建并启动加载线程
+        self.load_thread = DirLoadThread(self.connection, path)
+        self.load_thread.finished.connect(self.on_dir_loaded)
+        self.load_thread.start()
+
+    def on_dir_loaded(self, path, result, error):
+        """目录加载完成回调"""
+        self.loading = False
+        self.status_label.setText("")
+        self.tree.setEnabled(True)
+
+        if error:
+            QMessageBox.warning(self, "错误", f"无法加载目录: {error}")
+            return
 
         # 添加上级目录项（如果不是根目录）
         if path != "/":
             parent_item = QTreeWidgetItem(self.tree, [".. (上级目录)"])
             parent_item.setData(0, Qt.UserRole, os.path.dirname(path))
-
-        # 获取目录列表
-        result, error = self.connection.list_dir(path)
-        if error:
-            QMessageBox.warning(self, "错误", f"无法加载目录: {error}")
-            return
 
         items = result.get('items', [])
         if not items:

@@ -23,6 +23,7 @@ class RemoteDirDialog:
         self.connection = connection
         self.result = None
         self.current_path = "/"
+        self.loading = False
 
         # 创建对话框窗口
         self.dialog = tk.Toplevel(parent)
@@ -49,6 +50,10 @@ class RemoteDirDialog:
         self.path_label = ttk.Label(path_frame, text="/", font=("", 10, "bold"))
         self.path_label.pack(side=tk.LEFT, padx=(5, 0))
 
+        # 加载状态标签
+        self.status_label = ttk.Label(path_frame, text="", foreground="gray")
+        self.status_label.pack(side=tk.RIGHT)
+
         # 目录列表
         list_frame = ttk.Frame(main_frame)
         list_frame.pack(fill=tk.BOTH, expand=True)
@@ -73,23 +78,42 @@ class RemoteDirDialog:
         ttk.Button(button_frame, text="取消", command=self.dialog.destroy).pack(side=tk.LEFT)
 
     def load_directory(self, path):
-        """加载目录内容"""
+        """加载目录内容（异步）"""
+        if self.loading:
+            return  # 如果正在加载，忽略新请求
+
+        self.loading = True
         self.current_path = path
         self.path_label.config(text=path)
         self.dir_listbox.delete(0, tk.END)
+        self.status_label.config(text="正在加载...")
+        self.dir_listbox.config(state=tk.DISABLED)
+
+        # 在后台线程中加载
+        def load_in_background():
+            result, error = self.connection.list_dir(path)
+            # 使用 after 在主线程中更新 GUI
+            self.dialog.after(0, self.on_dir_loaded, path, result, error)
+
+        thread = threading.Thread(target=load_in_background, daemon=True)
+        thread.start()
+
+    def on_dir_loaded(self, path, result, error):
+        """目录加载完成回调（在主线程中调用）"""
+        self.loading = False
+        self.status_label.config(text="")
+        self.dir_listbox.config(state=tk.NORMAL)
+
+        if error:
+            messagebox.showerror("错误", f"无法加载目录: {error}", parent=self.dialog)
+            return
 
         # 添加上级目录项（如果不是根目录）
         if path != "/":
             self.dir_listbox.insert(tk.END, ".. (上级目录)")
 
-        # 获取目录列表
-        result, error = self.connection.list_dir(path)
-        if error:
-            messagebox.showerror("错误", f"无法加载目录: {error}", parent=self.dialog)
-            return
-
         items = result.get('items', [])
-        if not items and path == "/":
+        if not items:
             self.dir_listbox.insert(tk.END, "(空目录)")
         else:
             for item in items:
