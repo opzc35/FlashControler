@@ -145,6 +145,7 @@
 欢迎提交Issue和Pull Request！
 
 参与方式：
+0. 现提一个issues看有没有类似请求或已实现功能
 1. Fork本仓库
 2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
 3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
