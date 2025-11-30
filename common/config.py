@@ -23,8 +23,7 @@ class Config:
         },
         "client": {
             "last_host": "",
-            "last_port": 9999,
-            "auto_reconnect": True
+            "last_port": 9999
         },
         "update": {
             "check_on_startup": True,
