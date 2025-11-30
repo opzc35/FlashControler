@@ -483,7 +483,8 @@ class FlashClientGUI(QMainWindow):
 
         # 启动时检查更新
         if self.config.get('update', 'check_on_startup', True):
-            QTimer.singleShot(1000, self.check_update)
+            # 启动时自动检查更新，如果是最新版不弹窗
+            QTimer.singleShot(1000, lambda: self.check_update(silent_if_latest=True))
 
     def setup_ui(self):
         """设置UI"""
@@ -1104,23 +1105,36 @@ class FlashClientGUI(QMainWindow):
         timestamp = datetime.now().strftime("%H:%M:%S")
         self.transfer_log.append(f"[{timestamp}] {message}")
 
-    def check_update(self):
-        """检查更新"""
+    def check_update(self, silent_if_latest=False):
+        """检查更新
+
+        Args:
+            silent_if_latest: 如果已是最新版本，是否静默（不弹窗）。默认False
+        """
         self.update_btn.setEnabled(False)
         self.update_btn.setText("🔄 检查中...")
 
         self.update_check_thread = UpdateCheckThread(self.update_manager)
-        self.update_check_thread.result.connect(self.on_update_checked)
+        # 使用lambda传递参数到回调函数
+        self.update_check_thread.result.connect(lambda info: self.on_update_checked(info, silent_if_latest))
         self.update_check_thread.start()
 
-    def on_update_checked(self, update_info):
-        """更新检查完成"""
+    def on_update_checked(self, update_info, silent_if_latest=False):
+        """更新检查完成
+
+        Args:
+            update_info: 更新信息
+            silent_if_latest: 如果已是最新版本，是否静默（不弹窗）
+        """
         self.update_btn.setEnabled(True)
         self.update_btn.setText("🔄 检查更新")
 
         if update_info is None:
-            QMessageBox.critical(self, "检查更新失败", "无法连接到更新服务器，请检查网络连接")
+            # 检查失败时，只在手动检查时提示
+            if not silent_if_latest:
+                QMessageBox.critical(self, "检查更新失败", "无法连接到更新服务器，请检查网络连接")
         elif update_info.get('has_update'):
+            # 有新版本时总是提示
             reply = QMessageBox.question(
                 self,
                 "发现新版本",
@@ -1133,11 +1147,13 @@ class FlashClientGUI(QMainWindow):
                 import webbrowser
                 webbrowser.open(update_info['download_url'])
         else:
-            QMessageBox.information(
-                self,
-                "已是最新版本",
-                f"当前版本 {update_info['current_version']} 已是最新版本"
-            )
+            # 已是最新版本时，根据 silent_if_latest 参数决定是否提示
+            if not silent_if_latest:
+                QMessageBox.information(
+                    self,
+                    "已是最新版本",
+                    f"当前版本 {update_info['current_version']} 已是最新版本"
+                )
 
 
 def main():

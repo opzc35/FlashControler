@@ -183,7 +183,8 @@ class FlashClientGUI:
 
         # 启动时检查更新
         if self.config.get('update', 'check_on_startup', True):
-            self.check_update()
+            # 启动时自动检查更新，如果是最新版不弹窗
+            self.check_update(silent_if_latest=True)
 
     def setup_ui(self):
         """设置UI"""
@@ -708,25 +709,37 @@ class FlashClientGUI:
         self.transfer_log.insert(tk.END, f"{message}\n")
         self.transfer_log.see(tk.END)
 
-    def check_update(self):
-        """检查更新"""
+    def check_update(self, silent_if_latest=False):
+        """检查更新
+
+        Args:
+            silent_if_latest: 如果已是最新版本，是否静默（不弹窗）。默认False
+        """
         self.update_btn.config(state="disabled", text="检查中...")
 
-        threading.Thread(target=self._check_update_thread).start()
+        threading.Thread(target=self._check_update_thread, args=(silent_if_latest,)).start()
 
-    def _check_update_thread(self):
+    def _check_update_thread(self, silent_if_latest=False):
         """检查更新线程"""
         update_info = self.update_manager.check_update()
 
-        self.root.after(0, self._on_update_checked, update_info)
+        self.root.after(0, self._on_update_checked, update_info, silent_if_latest)
 
-    def _on_update_checked(self, update_info):
-        """更新检查完成"""
+    def _on_update_checked(self, update_info, silent_if_latest=False):
+        """更新检查完成
+
+        Args:
+            update_info: 更新信息
+            silent_if_latest: 如果已是最新版本，是否静默（不弹窗）
+        """
         self.update_btn.config(state="normal", text="检查更新")
 
         if update_info is None:
-            messagebox.showerror("错误", "检查更新失败，请检查网络连接")
+            # 检查失败时，只在手动检查时提示
+            if not silent_if_latest:
+                messagebox.showerror("错误", "检查更新失败，请检查网络连接")
         elif update_info.get('has_update'):
+            # 有新版本时总是提示
             result = messagebox.askyesno(
                 "发现新版本",
                 f"发现新版本 {update_info['latest_version']}\n"
@@ -737,7 +750,9 @@ class FlashClientGUI:
                 import webbrowser
                 webbrowser.open(update_info['download_url'])
         else:
-            messagebox.showinfo("检查更新", "当前已是最新版本")
+            # 已是最新版本时，根据 silent_if_latest 参数决定是否提示
+            if not silent_if_latest:
+                messagebox.showinfo("检查更新", "当前已是最新版本")
 
     def on_update_info(self, info):
         """更新信息回调"""
