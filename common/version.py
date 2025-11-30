@@ -4,8 +4,8 @@ FlashControler 版本信息
 此文件包含应用程序的版本号和相关元数据
 """
 
-__version__ = "1.0.4"
-__version_info__ = (1, 0, 4)
+__version__ = "1.1.1"
+__version_info__ = (1, 1, 1)
 
 # GitHub 仓库信息
 GITHUB_REPO = "opzc35/FlashControler"
@@ -17,8 +17,7 @@ UPDATE_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 
 # 更新日志（最近更新）
 CHANGELOG = """
-v1.0.4 (2024-11)
-- 添加可以选择文件目录树的功能
-- 修复无法选择目录的问题
-- 添加调试信息
+v1.1.1 (2024-11)
+- 服务端增加ip黑名单功能，可以手动封锁和过多尝试自动封锁
+- 简化大量代码，完全删掉Tkinter版本
 """
