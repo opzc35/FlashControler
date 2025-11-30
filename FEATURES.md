@@ -225,12 +225,15 @@ Windows客户端可以直接连接到Linux主机，就像在Linux本地使用终
     },
     "update": {
         "check_on_startup": "启动时检查更新",
-        "update_url": "更新检查URL"
+        "update_url": "更新检查URL（可选）"
     }
 }
 ```
 
-**注意**：版本号现在存储在代码中（`common/version.py`）。
+**注意**：
+- 版本号和更新URL现在存储在代码中（`common/version.py`）
+- 默认更新地址：`https://api.github.com/repos/opzc35/FlashControler/releases/latest`
+- 配置文件中的 `update_url` 是可选的，可用于自定义更新源
 
 ### 配置特点
 - JSON格式，易于编辑

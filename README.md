@@ -124,9 +124,11 @@ python client/client.py
 | 配置项 | 说明 | 默认值 | 使用端 |
 |-------|------|--------|--------|
 | `check_on_startup` | 启动时是否自动检查更新 | true | **双端** |
-| `update_url` | 更新检查的API地址<br>用于获取最新版本信息 | GitHub API | **双端** |
+| `update_url` | 更新检查的API地址<br>用于获取最新版本信息 | opzc35/FlashControler | **双端** |
 
-> **注意**：版本号现在存储在代码中（`common/version.py`），不再需要在配置文件中设置。
+> **注意**：
+> - 版本号和更新URL现在存储在代码中（`common/version.py`），不再需要在配置文件中设置
+> - 默认更新地址：`https://api.github.com/repos/opzc35/FlashControler/releases/latest`
 
 ### 终端配置（terminal）- 仅Linux服务端使用
 

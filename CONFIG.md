@@ -79,18 +79,26 @@
 | 配置项 | 类型 | 默认值 | 说明 |
 |-------|------|--------|------|
 | `check_on_startup` | bool | true | 启动时检查更新<br>• `true` - 启动时自动检查<br>• `false` - 不自动检查（可手动检查） |
-| `update_url` | string | GitHub API | 更新检查API地址<br>• 用于获取最新版本信息<br>• 一般不需要修改 |
+| `update_url` | string | opzc35/FlashControler | 更新检查API地址<br>• 默认指向项目的GitHub仓库<br>• 一般不需要修改 |
 
 **示例：**
 ```json
 "update": {
+    "check_on_startup": true
+}
+```
+
+或自定义更新URL：
+```json
+"update": {
     "check_on_startup": true,
-    "update_url": "https://api.github.com/repos/yourname/FlashControler/releases/latest"
+    "update_url": "https://api.github.com/repos/yourname/yourrepo/releases/latest"
 }
 ```
 
 **说明：**
-- 版本号现在存储在代码中（`common/version.py`），不再需要在配置文件中设置
+- 版本号和更新URL现在存储在代码中（`common/version.py`），不再需要在配置文件中设置
+- 默认更新地址：`https://api.github.com/repos/opzc35/FlashControler/releases/latest`
 - 如果不希望启动时检查更新，设置 `check_on_startup` 为 `false`
 - 仍可通过"关于"页面手动检查更新
 

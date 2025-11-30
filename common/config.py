@@ -3,6 +3,13 @@
 """
 import json
 import os
+import sys
+
+# 添加项目根目录到路径
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from common.version import UPDATE_URL
+
 
 class Config:
     """配置类"""
@@ -21,7 +28,7 @@ class Config:
         },
         "update": {
             "check_on_startup": True,
-            "update_url": "https://api.github.com/repos/yourname/FlashControler/releases/latest"
+            "update_url": UPDATE_URL
         },
         "terminal": {
             "shell": "/bin/bash",
