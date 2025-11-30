@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from client.connection import ClientConnection
 from client.update_manager import UpdateManager
 from common.config import Config
+from common.version import __version__
 
 
 class RemoteDirDialog:
@@ -167,7 +168,7 @@ class FlashClientGUI:
         self.config = Config("config/settings.json")
         self.connection = ClientConnection()
         self.update_manager = UpdateManager(
-            current_version=self.config.get('update', 'current_version', '1.0.0'),
+            current_version=__version__,
             update_url=self.config.get('update', 'update_url', '')
         )
 
@@ -349,8 +350,7 @@ class FlashClientGUI:
         title_label.grid(row=0, column=0, pady=(0, 10))
 
         # 版本信息
-        version = self.config.get('update', 'current_version', '1.0.0')
-        version_label = ttk.Label(about_frame, text=f"版本: {version}")
+        version_label = ttk.Label(about_frame, text=f"版本: {__version__}")
         version_label.grid(row=1, column=0, pady=5)
 
         # 描述

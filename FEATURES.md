@@ -225,11 +225,12 @@ Windows客户端可以直接连接到Linux主机，就像在Linux本地使用终
     },
     "update": {
         "check_on_startup": "启动时检查更新",
-        "update_url": "更新检查URL",
-        "current_version": "当前版本号"
+        "update_url": "更新检查URL"
     }
 }
 ```
+
+**注意**：版本号现在存储在代码中（`common/version.py`）。
 
 ### 配置特点
 - JSON格式，易于编辑

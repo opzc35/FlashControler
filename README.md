@@ -125,7 +125,8 @@ python client/client.py
 |-------|------|--------|--------|
 | `check_on_startup` | 启动时是否自动检查更新 | true | **双端** |
 | `update_url` | 更新检查的API地址<br>用于获取最新版本信息 | GitHub API | **双端** |
-| `current_version` | 当前程序版本号 | "1.0.0" | **双端** |
+
+> **注意**：版本号现在存储在代码中（`common/version.py`），不再需要在配置文件中设置。
 
 ### 终端配置（terminal）- 仅Linux服务端使用
 

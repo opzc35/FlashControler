@@ -19,6 +19,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from client.connection import ClientConnection
 from client.update_manager import UpdateManager
 from common.config import Config
+from common.version import __version__
 
 
 class HistoryDialog(QDialog):
@@ -471,7 +472,7 @@ class FlashClientGUI(QMainWindow):
         self.config = Config("config/settings.json")
         self.connection = ClientConnection()
         self.update_manager = UpdateManager(
-            current_version=self.config.get('update', 'current_version', '1.0.0'),
+            current_version=__version__,
             update_url=self.config.get('update', 'update_url', '')
         )
 
@@ -733,8 +734,7 @@ class FlashClientGUI(QMainWindow):
         about_layout.addWidget(subtitle)
 
         # 版本信息
-        version = self.config.get('update', 'current_version', '1.0.0')
-        version_label = QLabel(f"版本: {version}")
+        version_label = QLabel(f"版本: {__version__}")
         version_label.setFont(QFont("Arial", 11))
         version_label.setAlignment(Qt.AlignCenter)
         about_layout.addWidget(version_label)

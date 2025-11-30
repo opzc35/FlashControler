@@ -21,8 +21,7 @@ class Config:
         },
         "update": {
             "check_on_startup": True,
-            "update_url": "https://api.github.com/repos/yourname/FlashControler/releases/latest",
-            "current_version": "1.0.0"
+            "update_url": "https://api.github.com/repos/yourname/FlashControler/releases/latest"
         },
         "terminal": {
             "shell": "/bin/bash",

@@ -12,6 +12,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from common.protocol import Protocol
 from common.config import Config
+from common.version import __version__
 from server.terminal_handler import TerminalHandler
 from server.file_handler import FileHandler
 
@@ -140,11 +141,11 @@ class FlashServer:
 
     def handle_update_check(self, client_socket):
         """处理更新检查"""
-        version = self.config.get('update', 'current_version', '1.0.0')
+        # 版本号现在从代码中获取，不再从配置文件读取
         update_url = self.config.get('update', 'update_url', '')
 
         response = Protocol.pack_message(Protocol.MSG_UPDATE_INFO, {
-            "current_version": version,
+            "current_version": __version__,
             "update_url": update_url
         })
         client_socket.send(response)

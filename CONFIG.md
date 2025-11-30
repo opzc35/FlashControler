@@ -80,18 +80,17 @@
 |-------|------|--------|------|
 | `check_on_startup` | bool | true | 启动时检查更新<br>• `true` - 启动时自动检查<br>• `false` - 不自动检查（可手动检查） |
 | `update_url` | string | GitHub API | 更新检查API地址<br>• 用于获取最新版本信息<br>• 一般不需要修改 |
-| `current_version` | string | "1.0.0" | 当前程序版本号<br>• 用于版本比较<br>• **不要手动修改** |
 
 **示例：**
 ```json
 "update": {
     "check_on_startup": true,
-    "update_url": "https://api.github.com/repos/yourname/FlashControler/releases/latest",
-    "current_version": "1.0.0"
+    "update_url": "https://api.github.com/repos/yourname/FlashControler/releases/latest"
 }
 ```
 
 **说明：**
+- 版本号现在存储在代码中（`common/version.py`），不再需要在配置文件中设置
 - 如果不希望启动时检查更新，设置 `check_on_startup` 为 `false`
 - 仍可通过"关于"页面手动检查更新
 

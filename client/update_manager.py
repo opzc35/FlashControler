@@ -7,12 +7,18 @@ import sys
 import json
 from packaging import version
 
+# 添加项目根目录到路径
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from common.version import __version__ as DEFAULT_VERSION
+
 
 class UpdateManager:
     """自动更新管理器"""
 
-    def __init__(self, current_version="1.0.0", update_url=None):
-        self.current_version = current_version
+    def __init__(self, current_version=None, update_url=None):
+        # 如果没有指定版本号，使用代码中的默认版本号
+        self.current_version = current_version or DEFAULT_VERSION
         self.update_url = update_url or "https://api.github.com/repos/yourname/FlashControler/releases/latest"
 
     def check_update(self):
