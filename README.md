@@ -11,6 +11,10 @@
 - **快速文件传输**：轻松将文件从Windows上传到Linux的指定目录
   - 支持远程目录浏览
   - 实时传输进度显示
+- **IP黑名单系统**：防止暴力破解和恶意连接
+  - 🔒 认证失败10次自动封锁IP
+  - 📊 实时显示连接和认证状态
+  - 🛠️ 支持手动封锁/解锁IP
 - **自动更新系统**：检测新版本并提示用户更新
 - **安全认证**：密码保护的连接，确保安全性
 - **现代化GUI**：PyQt5美观界面，扁平设计
@@ -109,6 +113,39 @@ python start_client.py
 3. 点击"上传文件"
 4. 查看传输日志和进度
 
+### IP黑名单管理
+
+服务端会自动记录认证失败次数，超过10次自动封锁IP。
+
+**查看黑名单状态：**
+```bash
+python manage_ip.py status
+```
+
+**查看被封锁的IP：**
+```bash
+python manage_ip.py list
+```
+
+**解锁IP：**
+```bash
+python manage_ip.py unlock 192.168.1.100
+```
+
+**手动封锁IP：**
+```bash
+python manage_ip.py block 192.168.1.100
+```
+
+**服务端日志示例：**
+```
+[认证] ✓ IP 192.168.1.100 认证成功
+[认证] ✗ IP 192.168.1.101 认证失败 (失败次数: 5/10)
+[安全] 🔒 IP 192.168.1.101 已自动封锁（认证失败10次）
+[安全]    使用 'python manage_ip.py unlock 192.168.1.101' 解锁
+[安全] ❌ IP 192.168.1.101 已被封锁，拒绝连接
+```
+
 ## 🛠️ 项目结构
 
 ```
@@ -116,7 +153,8 @@ FlashControler/
 ├── server/                 # 服务端模块
 │   ├── server.py          # 主服务器
 │   ├── terminal_handler.py # 终端处理
-│   └── file_handler.py     # 文件处理
+│   ├── file_handler.py     # 文件处理
+│   └── ip_blacklist.py     # IP黑名单管理
 ├── client/                 # 客户端模块
 │   ├── client_pyqt5.py    # PyQt5 GUI
 │   ├── connection.py       # 网络连接
@@ -126,8 +164,10 @@ FlashControler/
 │   ├── config.py           # 配置管理
 │   └── version.py          # 版本信息
 ├── config/                 # 配置文件目录
+│   └── ip_blacklist.json   # IP黑名单数据
 ├── start_server.py         # 服务端启动脚本
 ├── start_client.py         # 客户端启动脚本
+├── manage_ip.py            # IP黑名单管理工具
 └── README.md
 ```
 

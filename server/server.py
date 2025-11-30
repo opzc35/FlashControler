@@ -15,6 +15,7 @@ from common.config import Config
 from common.version import __version__, UPDATE_URL
 from server.terminal_handler import TerminalHandler
 from server.file_handler import FileHandler
+from server.ip_blacklist import IPBlacklist
 
 
 class FlashServer:
@@ -25,6 +26,9 @@ class FlashServer:
         self.host = self.config.get('server', 'host', '0.0.0.0')
         self.port = self.config.get('server', 'port', 9999)
         self.password = self.config.get('server', 'password', 'flashcontrol123')
+
+        # IP黑名单管理器
+        self.ip_blacklist = IPBlacklist()
 
         self.server_socket = None
         self.clients = []
@@ -67,11 +71,28 @@ class FlashServer:
 
     def handle_client(self, client_socket, client_address):
         """处理客户端连接"""
+        client_ip = client_address[0]  # 提取IP地址
         authenticated = False
         terminal_handler = None
         file_handler = None
 
         try:
+            # 检查IP是否被封锁
+            is_blocked, block_reason = self.ip_blacklist.check_blocked(client_ip)
+            if is_blocked:
+                print(f"[安全] ❌ IP {client_ip} 已被封锁，拒绝连接")
+                print(f"[安全]    封锁原因: {block_reason}")
+                # 发送拒绝消息后立即关闭连接
+                try:
+                    response = Protocol.pack_message(Protocol.MSG_AUTH, {
+                        "status": "blocked",
+                        "reason": block_reason
+                    })
+                    client_socket.send(response)
+                except:
+                    pass
+                return
+
             # 等待认证
             msg_type, payload = Protocol.receive_message(client_socket)
 
@@ -80,7 +101,10 @@ class FlashServer:
                     authenticated = True
                     response = Protocol.pack_message(Protocol.MSG_AUTH, {"status": "success"})
                     client_socket.send(response)
-                    print(f"[FlashControler] 客户端 {client_address} 认证成功")
+
+                    # 记录认证成功
+                    self.ip_blacklist.record_auth_success(client_ip)
+                    print(f"[认证] ✓ IP {client_ip} 认证成功")
 
                     # 初始化处理器
                     terminal_handler = TerminalHandler(client_socket)
@@ -88,7 +112,18 @@ class FlashServer:
                 else:
                     response = Protocol.pack_message(Protocol.MSG_AUTH, {"status": "failed"})
                     client_socket.send(response)
-                    print(f"[FlashControler] 客户端 {client_address} 认证失败")
+
+                    # 记录认证失败
+                    auto_blocked = self.ip_blacklist.record_auth_failure(client_ip)
+                    status = self.ip_blacklist.blacklist.get(client_ip, {})
+                    fail_count = status.get('fail_count', 0)
+
+                    print(f"[认证] ✗ IP {client_ip} 认证失败 (失败次数: {fail_count}/{self.ip_blacklist.max_failures})")
+
+                    if auto_blocked:
+                        print(f"[安全] 🔒 IP {client_ip} 已自动封锁（认证失败{fail_count}次）")
+                        print(f"[安全]    使用 'python unlock_ip.py {client_ip}' 解锁")
+
                     return
 
             if not authenticated:
