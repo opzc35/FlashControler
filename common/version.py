@@ -4,8 +4,8 @@ FlashControler 版本信息
 此文件包含应用程序的版本号和相关元数据
 """
 
-__version__ = "Security-V1.1.0"
-__version_info__ = (1, 1, 0)
+__version__ = "V1.1.1"
+__version_info__ = (1, 1, 1)
 
 # GitHub 仓库信息
 GITHUB_REPO = "opzc35/FlashControler"
@@ -17,12 +17,12 @@ UPDATE_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 
 # 更新日志（最近更新）
 CHANGELOG = """
-Security-V1.1.0 (2025-12)
+V1.1.1 (2025-12)
+- 新增自定义留言功能：已登录客户端可设置登录失败时的提示信息
 - 安全增强：服务端显示每次认证尝试的密码
 - 新增文件下载功能（Linux到Windows）
 - 新增文件浏览器，支持可视化浏览远程文件系统
 - 支持批量文件下载，可多选文件
 - 传输速度优化，数据块大小提升至64KB
 - 服务端增加IP黑名单功能，可以手动封锁和过多尝试自动封锁
-- 简化大量代码，完全删掉Tkinter版本
 """
