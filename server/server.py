@@ -157,9 +157,17 @@ class FlashServer:
                 elif msg_type == Protocol.MSG_UPDATE_CHECK:
                     self.handle_update_check(client_socket)
 
-                # 列出目录
+                # 列出目录（只返回目录）
                 elif msg_type == Protocol.MSG_LIST_DIR:
                     self.handle_list_dir(client_socket, payload)
+
+                # 文件列表（返回文件和目录）
+                elif msg_type == Protocol.MSG_FILE_LIST:
+                    file_handler.handle_file_list_request(payload)
+
+                # 文件下载
+                elif msg_type == Protocol.MSG_FILE_DOWNLOAD:
+                    file_handler.handle_download_request(payload)
 
                 # 心跳包
                 elif msg_type == Protocol.MSG_HEARTBEAT:

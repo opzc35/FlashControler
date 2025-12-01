@@ -19,6 +19,8 @@ class Protocol:
     MSG_UPDATE_CHECK = 8      # 检查更新
     MSG_UPDATE_INFO = 9       # 更新信息
     MSG_LIST_DIR = 10         # 列出目录
+    MSG_FILE_DOWNLOAD = 11    # 文件下载请求
+    MSG_FILE_LIST = 12        # 文件列表（包含文件和文件夹）
     MSG_ERROR = 99            # 错误消息
 
     @staticmethod

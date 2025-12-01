@@ -310,6 +310,262 @@ class RemoteDirDialog(QDialog):
         return self.selected_path
 
 
+class FileListThread(QThread):
+    """文件列表加载线程"""
+    finished = pyqtSignal(str, object, object)  # path, result, error
+
+    def __init__(self, connection, path):
+        super().__init__()
+        self.connection = connection
+        self.path = path
+
+    def run(self):
+        """在后台线程中加载文件列表"""
+        result, error = self.connection.list_files(self.path)
+        self.finished.emit(self.path, result, error)
+
+
+class FileBrowserDialog(QDialog):
+    """远程文件浏览器对话框"""
+
+    file_list_loaded = pyqtSignal(str, object, object)  # path, result, error
+
+    def __init__(self, connection, parent=None):
+        super().__init__(parent)
+        self.connection = connection
+        self.selected_files = []  # 支持多选
+        self.current_path = "/"
+        self.loading = False
+
+        self.setWindowTitle("远程文件浏览器")
+        self.setModal(True)
+        self.resize(700, 600)
+
+        self.setup_ui()
+
+        # 连接信号
+        self.file_list_loaded.connect(self.on_file_list_loaded)
+
+        # 加载根目录
+        self.load_directory("/")
+
+    def setup_ui(self):
+        """设置UI"""
+        layout = QVBoxLayout(self)
+
+        # 当前路径显示
+        path_layout = QHBoxLayout()
+        path_layout.addWidget(QLabel("当前路径:"))
+        self.current_path_label = QLabel("/")
+        self.current_path_label.setStyleSheet("font-weight: bold; color: #2c3e50;")
+        path_layout.addWidget(self.current_path_label)
+        path_layout.addStretch()
+
+        # 加载状态标签
+        self.status_label = QLabel("")
+        self.status_label.setStyleSheet("color: #7f8c8d; font-style: italic;")
+        path_layout.addWidget(self.status_label)
+
+        layout.addLayout(path_layout)
+
+        # 文件树（显示文件和文件夹）
+        self.tree = QTreeWidget()
+        self.tree.setHeaderLabels(["名称", "大小", "类型"])
+        self.tree.setColumnWidth(0, 400)
+        self.tree.setColumnWidth(1, 120)
+        self.tree.setSelectionMode(QTreeWidget.ExtendedSelection)  # 支持多选
+        self.tree.itemDoubleClicked.connect(self.on_item_double_clicked)
+        self.tree.setStyleSheet("""
+            QTreeWidget {
+                border: 2px solid #dcdde1;
+                border-radius: 5px;
+                background-color: white;
+                font-size: 11px;
+            }
+            QTreeWidget::item {
+                padding: 5px;
+            }
+            QTreeWidget::item:selected {
+                background-color: #3498db;
+                color: white;
+            }
+        """)
+        layout.addWidget(self.tree)
+
+        # 按钮区域
+        button_layout = QHBoxLayout()
+
+        # 刷新按钮
+        refresh_btn = QPushButton("🔄 刷新")
+        refresh_btn.clicked.connect(self.refresh_current)
+        button_layout.addWidget(refresh_btn)
+
+        # 下载选中的文件按钮
+        self.download_btn = QPushButton("📥 下载选中文件")
+        self.download_btn.clicked.connect(self.download_selected)
+        button_layout.addWidget(self.download_btn)
+
+        # 关闭按钮
+        close_btn = QPushButton("关闭")
+        close_btn.clicked.connect(self.accept)
+        button_layout.addWidget(close_btn)
+
+        layout.addLayout(button_layout)
+
+        # 应用样式
+        self.setStyleSheet("""
+            QPushButton {
+                background-color: #3498db;
+                color: white;
+                border: none;
+                border-radius: 5px;
+                padding: 8px 15px;
+                font-weight: bold;
+                min-height: 30px;
+            }
+            QPushButton:hover {
+                background-color: #2980b9;
+            }
+            QPushButton:pressed {
+                background-color: #21618c;
+            }
+        """)
+
+    def load_directory(self, path):
+        """加载目录内容（异步）"""
+        if self.loading:
+            return
+
+        self.loading = True
+        self.current_path = path
+        self.tree.clear()
+        self.current_path_label.setText(path)
+        self.status_label.setText("正在加载...")
+
+        # 禁用控件
+        self.tree.setEnabled(False)
+        self.download_btn.setEnabled(False)
+
+        # 创建并启动加载线程
+        self.load_thread = FileListThread(self.connection, path)
+        self.load_thread.finished.connect(self.on_file_list_loaded)
+        self.load_thread.start()
+
+    def on_file_list_loaded(self, path, result, error):
+        """文件列表加载完成回调"""
+        self.loading = False
+        self.status_label.setText("")
+        self.tree.setEnabled(True)
+        self.download_btn.setEnabled(True)
+
+        if error:
+            QMessageBox.warning(self, "错误", f"无法加载目录: {error}")
+            return
+
+        # 添加上级目录项（如果不是根目录）
+        if path != "/":
+            parent_path = os.path.dirname(path) or "/"
+            parent_item = QTreeWidgetItem(self.tree, [".. (上级目录)", "", "目录"])
+            parent_item.setData(0, Qt.UserRole, {'path': parent_path, 'is_dir': True})
+
+        items = result.get('items', [])
+        if not items:
+            # 显示空目录提示
+            empty_item = QTreeWidgetItem(self.tree, ["(空目录)", "", ""])
+            empty_item.setDisabled(True)
+        else:
+            # 先显示文件夹
+            folders = [item for item in items if item['is_dir']]
+            files = [item for item in items if not item['is_dir']]
+
+            for item in folders:
+                size_text = ""
+                tree_item = QTreeWidgetItem(self.tree, [f"📁 {item['name']}", size_text, "目录"])
+                tree_item.setData(0, Qt.UserRole, item)
+
+            for item in files:
+                size_text = self.format_size(item['size'])
+                tree_item = QTreeWidgetItem(self.tree, [f"📄 {item['name']}", size_text, "文件"])
+                tree_item.setData(0, Qt.UserRole, item)
+
+    def format_size(self, size_bytes):
+        """格式化文件大小"""
+        if size_bytes < 1024:
+            return f"{size_bytes} B"
+        elif size_bytes < 1024 * 1024:
+            return f"{size_bytes / 1024:.1f} KB"
+        elif size_bytes < 1024 * 1024 * 1024:
+            return f"{size_bytes / (1024 * 1024):.1f} MB"
+        else:
+            return f"{size_bytes / (1024 * 1024 * 1024):.2f} GB"
+
+    def on_item_double_clicked(self, item, column):
+        """双击项目时的操作"""
+        data = item.data(0, Qt.UserRole)
+        if data and data.get('is_dir'):
+            # 双击目录，进入该目录
+            self.load_directory(data['path'])
+        elif data and not data.get('is_dir'):
+            # 双击文件，下载文件
+            self.download_file(data)
+
+    def refresh_current(self):
+        """刷新当前目录"""
+        self.load_directory(self.current_path)
+
+    def download_selected(self):
+        """下载选中的文件"""
+        selected_items = self.tree.selectedItems()
+        if not selected_items:
+            QMessageBox.information(self, "提示", "请先选择要下载的文件")
+            return
+
+        files_to_download = []
+        for item in selected_items:
+            data = item.data(0, Qt.UserRole)
+            if data and not data.get('is_dir'):
+                files_to_download.append(data)
+
+        if not files_to_download:
+            QMessageBox.information(self, "提示", "您选择的项目中没有文件")
+            return
+
+        # 选择保存目录
+        save_dir = QFileDialog.getExistingDirectory(self, "选择保存目录", "")
+        if not save_dir:
+            return
+
+        # 下载文件
+        for file_data in files_to_download:
+            self.download_file(file_data, save_dir)
+
+    def download_file(self, file_data, save_dir=None):
+        """下载单个文件"""
+        if not save_dir:
+            # 选择保存路径
+            filename = file_data['name']
+            save_path, _ = QFileDialog.getSaveFileName(
+                self,
+                "保存文件",
+                filename,
+                "所有文件 (*.*)"
+            )
+            if not save_path:
+                return
+        else:
+            save_path = os.path.join(save_dir, file_data['name'])
+
+        # 使用父窗口的下载功能
+        if hasattr(self.parent(), 'download_remote_file'):
+            self.parent().download_remote_file(file_data['path'], save_path)
+        else:
+            QMessageBox.warning(self, "错误", "下载功能不可用")
+
+    def get_selected_files(self):
+        """获取选中的文件列表"""
+        return self.selected_files
+
+
 class CommandLineEdit(QLineEdit):
     """带命令历史功能的输入框"""
 
@@ -439,6 +695,21 @@ class UploadThread(QThread):
 
     def run(self):
         success, message = self.connection.upload_file(self.file_path, self.target_path)
+        self.result.emit(success, message)
+
+
+class DownloadThread(QThread):
+    """下载线程"""
+    result = pyqtSignal(bool, str)
+
+    def __init__(self, connection, remote_path, local_path):
+        super().__init__()
+        self.connection = connection
+        self.remote_path = remote_path
+        self.local_path = local_path
+
+    def run(self):
+        success, message = self.connection.download_file(self.remote_path, self.local_path)
         self.result.emit(success, message)
 
 
@@ -681,6 +952,29 @@ class FlashClientGUI(QMainWindow):
         self.upload_btn.clicked.connect(self.upload_file)
         file_layout.addWidget(self.upload_btn)
 
+        # 分隔线
+        separator = QLabel("─" * 60)
+        separator.setAlignment(Qt.AlignCenter)
+        separator.setStyleSheet("color: #bdc3c7; margin: 10px 0;")
+        file_layout.addWidget(separator)
+
+        # 文件下载区域
+        download_group = QGroupBox("文件下载")
+        download_layout = QVBoxLayout()
+
+        download_info = QLabel("从远程服务器下载文件到本地")
+        download_info.setStyleSheet("color: #7f8c8d; margin-bottom: 10px;")
+        download_layout.addWidget(download_info)
+
+        # 浏览远程文件按钮
+        self.browse_remote_files_btn = QPushButton("📂 浏览远程文件")
+        self.browse_remote_files_btn.setMinimumHeight(40)
+        self.browse_remote_files_btn.clicked.connect(self.browse_remote_files)
+        download_layout.addWidget(self.browse_remote_files_btn)
+
+        download_group.setLayout(download_layout)
+        file_layout.addWidget(download_group)
+
         # 进度区域
         progress_group = QGroupBox("传输进度")
         progress_layout = QVBoxLayout()
@@ -749,7 +1043,9 @@ class FlashClientGUI(QMainWindow):
 
         features = [
             "🖥️  远程终端访问 - 直接控制Linux主机终端",
-            "📁  快速文件传输 - 轻松上传文件到Linux服务器",
+            "📤  文件上传 - 轻松上传文件到Linux服务器",
+            "📥  文件下载 - 从服务器下载文件到本地",
+            "📂  文件浏览器 - 可视化浏览远程文件系统",
             "🔒  安全认证 - 密码保护，确保连接安全",
             "🔄  自动更新 - 智能检测新版本",
             "🎨  美观界面 - 现代化的用户体验"
@@ -1088,7 +1384,7 @@ class FlashClientGUI(QMainWindow):
         """文件传输进度回调"""
         self.progress_bar.setValue(int(progress))
         self.progress_label.setText(
-            f"正在上传: {progress:.1f}% ({self.format_bytes(sent)} / {self.format_bytes(total)})"
+            f"正在传输: {progress:.1f}% ({self.format_bytes(sent)} / {self.format_bytes(total)})"
         )
 
     def format_bytes(self, bytes_num):
@@ -1104,6 +1400,52 @@ class FlashClientGUI(QMainWindow):
         from datetime import datetime
         timestamp = datetime.now().strftime("%H:%M:%S")
         self.transfer_log.append(f"[{timestamp}] {message}")
+
+    def browse_remote_files(self):
+        """浏览远程文件"""
+        if not self.connection or not self.connection.connected:
+            QMessageBox.warning(self, "错误", "请先连接到服务器")
+            return
+
+        # 打开文件浏览器对话框
+        dialog = FileBrowserDialog(self.connection, self)
+        dialog.exec_()
+
+    def download_remote_file(self, remote_path, local_path):
+        """下载远程文件"""
+        if not self.connection or not self.connection.connected:
+            QMessageBox.warning(self, "错误", "请先连接到服务器")
+            return
+
+        self.log_transfer(f"开始下载: {remote_path} -> {local_path}")
+        self.progress_bar.setValue(0)
+        self.progress_label.setText("准备下载...")
+
+        # 禁用按钮
+        self.browse_remote_files_btn.setEnabled(False)
+        self.upload_btn.setEnabled(False)
+
+        # 创建下载线程
+        self.download_thread = DownloadThread(self.connection, remote_path, local_path)
+        self.download_thread.result.connect(self.on_download_complete)
+        self.download_thread.start()
+
+    def on_download_complete(self, success, message):
+        """下载完成回调"""
+        # 启用按钮
+        self.browse_remote_files_btn.setEnabled(True)
+        self.upload_btn.setEnabled(True)
+
+        if success:
+            self.progress_bar.setValue(100)
+            self.progress_label.setText("下载完成!")
+            self.log_transfer(f"✓ {message}")
+            QMessageBox.information(self, "下载成功", message)
+        else:
+            self.progress_bar.setValue(0)
+            self.progress_label.setText("下载失败")
+            self.log_transfer(f"✗ {message}")
+            QMessageBox.critical(self, "下载失败", message)
 
     def check_update(self, silent_if_latest=False):
         """检查更新
