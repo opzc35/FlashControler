@@ -30,6 +30,9 @@ class FlashServer:
         # IP黑名单管理器
         self.ip_blacklist = IPBlacklist()
 
+        # 自定义留言
+        self.custom_message = "访问被拒绝"
+
         self.server_socket = None
         self.clients = []
         self.running = False
@@ -86,7 +89,8 @@ class FlashServer:
                 try:
                     response = Protocol.pack_message(Protocol.MSG_AUTH, {
                         "status": "blocked",
-                        "reason": block_reason
+                        "reason": block_reason,
+                        "message": self.custom_message
                     })
                     client_socket.send(response)
                 except:
@@ -110,7 +114,10 @@ class FlashServer:
                     terminal_handler = TerminalHandler(client_socket)
                     file_handler = FileHandler(client_socket)
                 else:
-                    response = Protocol.pack_message(Protocol.MSG_AUTH, {"status": "failed"})
+                    response = Protocol.pack_message(Protocol.MSG_AUTH, {
+                        "status": "failed",
+                        "message": self.custom_message
+                    })
                     client_socket.send(response)
 
                     # 记录认证失败
@@ -128,6 +135,11 @@ class FlashServer:
                     return
 
             if not authenticated:
+                # 非标准客户端，直接发送字符串
+                try:
+                    client_socket.send(self.custom_message.encode('utf-8'))
+                except:
+                    pass
                 return
 
             # 处理客户端消息
@@ -169,6 +181,13 @@ class FlashServer:
                 # 文件下载
                 elif msg_type == Protocol.MSG_FILE_DOWNLOAD:
                     file_handler.handle_download_request(payload)
+
+                # 设置留言
+                elif msg_type == Protocol.MSG_SET_MESSAGE:
+                    self.custom_message = payload.get('message', '访问被拒绝')
+                    print(f"[留言] 已更新自定义留言: {self.custom_message}")
+                    response = Protocol.pack_message(Protocol.MSG_SET_MESSAGE, {"status": "success"})
+                    client_socket.send(response)
 
                 # 心跳包
                 elif msg_type == Protocol.MSG_HEARTBEAT:

@@ -21,6 +21,7 @@ class Protocol:
     MSG_LIST_DIR = 10         # 列出目录
     MSG_FILE_DOWNLOAD = 11    # 文件下载请求
     MSG_FILE_LIST = 12        # 文件列表（包含文件和文件夹）
+    MSG_SET_MESSAGE = 13      # 设置留言
     MSG_ERROR = 99            # 错误消息
 
     @staticmethod

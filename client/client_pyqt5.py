@@ -1061,6 +1061,30 @@ class FlashClientGUI(QMainWindow):
 
         about_layout.addSpacing(20)
 
+        # 自定义留言设置
+        message_group = QGroupBox("自定义留言")
+        message_layout = QVBoxLayout()
+
+        message_info = QLabel("设置登录失败时显示的留言")
+        message_info.setStyleSheet("color: #7f8c8d; margin-bottom: 5px;")
+        message_layout.addWidget(message_info)
+
+        message_input_layout = QHBoxLayout()
+        self.message_input = QLineEdit()
+        self.message_input.setPlaceholderText("输入自定义留言...")
+        message_input_layout.addWidget(self.message_input)
+
+        self.set_message_btn = QPushButton("设置留言")
+        self.set_message_btn.setMinimumWidth(100)
+        self.set_message_btn.clicked.connect(self.set_custom_message)
+        message_input_layout.addWidget(self.set_message_btn)
+
+        message_layout.addLayout(message_input_layout)
+        message_group.setLayout(message_layout)
+        about_layout.addWidget(message_group)
+
+        about_layout.addSpacing(20)
+
         # 检查更新按钮
         self.update_btn = QPushButton("🔄 检查更新")
         self.update_btn.setMinimumHeight(40)
@@ -1496,6 +1520,24 @@ class FlashClientGUI(QMainWindow):
                     "已是最新版本",
                     f"当前版本 {update_info['current_version']} 已是最新版本"
                 )
+
+    def set_custom_message(self):
+        """设置自定义留言"""
+        if not self.connection.connected:
+            QMessageBox.warning(self, "未连接", "请先连接到服务器")
+            return
+
+        message = self.message_input.text().strip()
+        if not message:
+            QMessageBox.warning(self, "输入错误", "请输入留言内容")
+            return
+
+        success, result = self.connection.set_custom_message(message)
+        if success:
+            QMessageBox.information(self, "成功", "自定义留言已设置")
+            self.message_input.clear()
+        else:
+            QMessageBox.critical(self, "失败", result)
 
 
 def main():

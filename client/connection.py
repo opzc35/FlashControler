@@ -62,7 +62,8 @@ class ClientConnection:
 
                 return True, "连接成功"
             else:
-                return False, "认证失败"
+                message = payload.get('message', '认证失败') if isinstance(payload, dict) else "认证失败"
+                return False, message
 
         except socket.timeout:
             return False, "连接超时"
@@ -363,6 +364,18 @@ class ClientConnection:
                 self.downloading = False
                 print(f"[DEBUG] 下载文件异常: {e}")
                 return False, f"下载文件失败: {str(e)}"
+
+    def set_custom_message(self, message):
+        """设置自定义留言"""
+        if not self.connected:
+            return False, "未连接到服务器"
+
+        try:
+            msg = Protocol.pack_message(Protocol.MSG_SET_MESSAGE, {'message': message})
+            self.socket.send(msg)
+            return True, "留言设置成功"
+        except Exception as e:
+            return False, f"设置留言失败: {str(e)}"
 
     def register_callback(self, event, callback):
         """注册回调函数"""
