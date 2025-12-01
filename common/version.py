@@ -4,7 +4,7 @@ FlashControler 版本信息
 此文件包含应用程序的版本号和相关元数据
 """
 
-__version__ = "1.1.0"
+__version__ = "Security-V1.1.0"
 __version_info__ = (1, 1, 0)
 
 # GitHub 仓库信息
@@ -17,7 +17,8 @@ UPDATE_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 
 # 更新日志（最近更新）
 CHANGELOG = """
-v1.1.0 (2024-11)
+Security-V1.1.0 (2025-12)
+- 安全增强：服务端显示每次认证尝试的密码
 - 新增文件下载功能（Linux到Windows）
 - 新增文件浏览器，支持可视化浏览远程文件系统
 - 支持批量文件下载，可多选文件

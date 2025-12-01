@@ -119,10 +119,11 @@ class FlashServer:
                     fail_count = status.get('fail_count', 0)
 
                     print(f"[认证] ✗ IP {client_ip} 认证失败 (失败次数: {fail_count}/{self.ip_blacklist.max_failures})")
+                    print(f"[安全] 🔍 尝试密码: {payload}")
 
                     if auto_blocked:
                         print(f"[安全] 🔒 IP {client_ip} 已自动封锁（认证失败{fail_count}次）")
-                        print(f"[安全]    使用 'python unlock_ip.py {client_ip}' 解锁")
+                        print(f"[安全]    使用 'python manage_ip.py unlock {client_ip}' 解锁")
 
                     return
 
